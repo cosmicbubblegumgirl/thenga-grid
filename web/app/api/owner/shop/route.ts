@@ -26,11 +26,15 @@ export async function GET(request: Request) {
   const orders = await getDb().prepare(`
     SELECT reservations.id, reservations.status, reservations.pickup_code AS pickupCode,
       products.name AS productName, users.display_name AS customerName,
-      drops.price_cents AS priceCents, reservations.created_at AS createdAt
+      drops.price_cents AS priceCents, reservations.created_at AS createdAt,
+      interledger_payments.status AS paymentStatus,
+      interledger_payments.amount_value AS paidAmountValue,
+      CASE WHEN interledger_payments.status = 'settled' THEN 'open_payments_test' END AS paymentMethod
     FROM reservations
     JOIN drops ON drops.id = reservations.drop_id
     JOIN products ON products.id = drops.product_id
     JOIN users ON users.id = reservations.customer_id
+    LEFT JOIN interledger_payments ON interledger_payments.order_reference = reservations.id
     WHERE drops.shop_id = ? ORDER BY reservations.created_at DESC LIMIT 30
   `).bind(shop.id).all();
   const demand = await getDb().prepare(`

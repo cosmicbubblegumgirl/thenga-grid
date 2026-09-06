@@ -11,7 +11,12 @@ type DemoOrder = {
   productName: string;
   customerName: string;
   priceCents: number;
+  customerId?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  paidAmountValue?: string;
 };
+type DemoPayment = { id: string; userId: string; orderReference: string; amountValue: string; assetCode: 'ZAR'; assetScale: 2; status: string; senderWallet: string; createdAt: number };
 type DemoShop = Shop & { ownerId?: string };
 type DemoState = {
   users: DemoUser[];
@@ -19,10 +24,11 @@ type DemoState = {
   shops: DemoShop[];
   community: Array<{ id: string; authorName: string; body: string; createdAt: number; shopName?: string; area: 'soweto' | 'ramsgate' }>;
   orders: DemoOrder[];
+  payments: DemoPayment[];
   demand: Record<string, number>;
 };
 
-const STORAGE_KEY = 'thenga-grid-pages-demo-v2';
+const STORAGE_KEY = 'thenga-grid-pages-demo-v3';
 export const isStaticDemo = typeof __THENGA_STATIC_DEMO__ !== 'undefined' && __THENGA_STATIC_DEMO__;
 
 const SOWETO_LOCATION: Position = { latitude: -26.2383, longitude: 27.9077 };
@@ -121,11 +127,12 @@ function createDemoState(): DemoState {
       { id: 'post_4', authorName: 'Bidstone Pantry', body: 'New vegetable delivery has arrived near 88 Bidstone Road.', shopName: 'Bidstone Pantry', createdAt: now - 1740, area: 'ramsgate' },
     ],
     orders: [
-      { id: 'order_soweto_new', shopId: 'shop_mamat', status: 'reserved', pickupCode: '4821', productName: 'Fresh white bread', customerName: 'Nandi Khumalo', priceCents: 1500 },
+      { id: 'order_soweto_new', shopId: 'shop_mamat', status: 'reserved', pickupCode: '4821', productName: 'Fresh white bread', customerName: 'Nandi Khumalo', priceCents: 1500, paymentStatus: 'settled', paymentMethod: 'open_payments_test', paidAmountValue: '1500' },
       { id: 'order_soweto_packing', shopId: 'shop_mamat', status: 'packing', pickupCode: '1764', productName: 'Full cream milk 1L', customerName: 'Thabo Mokoena', priceCents: 2199 },
       { id: 'order_ramsgate_new', shopId: 'shop_harbour', status: 'reserved', pickupCode: '5932', productName: 'Fresh white bread', customerName: 'Ayesha Naidoo', priceCents: 1450 },
       { id: 'order_ramsgate_ready', shopId: 'shop_harbour', status: 'ready', pickupCode: '8046', productName: 'Large eggs 6-pack', customerName: 'Sipho Cele', priceCents: 2450 },
     ],
+    payments: [],
     demand: { bread: 12, milk: 9, 'baby formula': 7, airtime: 5 },
   };
 }
@@ -296,9 +303,39 @@ async function demoFetch(rawUrl: string, init?: RequestInit): Promise<Response> 
     drop.quantity -= 1;
     const pickupCode = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
     const reservationId = id('res');
-    state.orders.push({ id: reservationId, shopId: shop.id, status: 'reserved', pickupCode, productName: drop.productName, customerName: current.displayName, priceCents: drop.priceCents });
+    state.orders.push({ id: reservationId, shopId: shop.id, status: 'reserved', pickupCode, productName: drop.productName, customerName: current.displayName, customerId: current.id, priceCents: drop.priceCents });
     saveState(state);
     return json({ reservation: { id: reservationId, status: 'reserved', pickupCode, expiresAt: Math.floor(Date.now() / 1000) + 900 } }, 201);
+  }
+  if (url.pathname.endsWith('/api/payments/interledger/start') && method === 'POST') {
+    if (!current || current.role !== 'customer') return json({ error: 'Sign in with a customer account to pay.' }, 401);
+    const body = await bodyOf(init);
+    const wallet = String(body.senderWalletAddress ?? '').trim();
+    const reservationId = String(body.reservationId ?? '');
+    if (!/^https:\/\/[^\s/]+\/.+/.test(wallet)) return json({ error: 'Enter a valid HTTPS wallet address.' }, 400);
+    const order = state.orders.find((candidate) => candidate.id === reservationId && candidate.customerId === current.id);
+    if (!order) return json({ error: 'Reservation was not found.' }, 404);
+    const payment: DemoPayment = { id: id('ilp'), userId: current.id, orderReference: order.id, amountValue: String(order.priceCents), assetCode: 'ZAR', assetScale: 2, status: 'awaiting_consent', senderWallet: wallet, createdAt: Math.floor(Date.now() / 1000) };
+    state.payments.push(payment); saveState(state);
+    return json({ paymentId: payment.id, status: payment.status, simulated: true, quote: { debitAmount: { value: payment.amountValue, assetCode: 'ZAR', assetScale: 2 }, receiveAmount: { value: payment.amountValue, assetCode: 'ZAR', assetScale: 2 } } }, 201);
+  }
+  if (url.pathname.endsWith('/api/payments/interledger/continue') && method === 'POST') {
+    if (!current || current.role !== 'customer') return json({ error: 'Sign in with a customer account to continue.' }, 401);
+    const body = await bodyOf(init);
+    const payment = state.payments.find((candidate) => candidate.id === body.paymentId && candidate.userId === current.id);
+    if (!payment) return json({ error: 'Payment was not found.' }, 404);
+    payment.status = 'settled';
+    const order = state.orders.find((candidate) => candidate.id === payment.orderReference)!;
+    order.paymentStatus = 'settled'; order.paymentMethod = 'open_payments_test'; order.paidAmountValue = payment.amountValue;
+    const shop = state.shops.find((candidate) => candidate.id === order.shopId)!; saveState(state);
+    return json({ payment: { id: payment.id, orderReference: order.id, amountValue: payment.amountValue, assetCode: payment.assetCode, status: payment.status, pickupCode: order.pickupCode, productName: order.productName, shopName: shop.name, latitude: shop.latitude, longitude: shop.longitude, paymentMethod: 'open_payments_test' } });
+  }
+  if (url.pathname.endsWith('/api/payments/interledger/status') && method === 'GET') {
+    const payment = state.payments.find((candidate) => candidate.id === url.searchParams.get('paymentId') && candidate.userId === current?.id);
+    if (!payment) return json({ error: 'Payment not found.' }, 404);
+    const order = state.orders.find((candidate) => candidate.id === payment.orderReference)!;
+    const shop = state.shops.find((candidate) => candidate.id === order.shopId)!;
+    return json({ payment: { ...payment, pickupCode: order.pickupCode, productName: order.productName, shopName: shop.name, latitude: shop.latitude, longitude: shop.longitude } });
   }
   if (url.pathname.endsWith('/api/demand') && method === 'POST') {
     const body = await bodyOf(init);

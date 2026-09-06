@@ -9,6 +9,7 @@ import {
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { AuthScreen, BrandIcon } from '@/components/auth-screen';
 import { LiveMap } from '@/components/live-map';
+import { InterledgerCheckout, type PaymentReceipt } from '@/components/interledger-checkout';
 import { OwnerDashboard } from '@/components/owner-dashboard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,6 +49,8 @@ export default function Home() {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [favourites, setFavourites] = useState<string[]>([]);
+  const [checkout, setCheckout] = useState<{ drop: Drop; shop: Shop } | null>(null);
+  const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceipt | null>(null);
 
   const notify = useCallback((message: string) => {
     setNotice(message);
@@ -119,6 +122,12 @@ export default function Home() {
     const savedMode = window.localStorage.getItem('tg_easy_mode');
     if (savedMode === 'on') setEasyMode(true);
     locate(false);
+    const paymentId = new URLSearchParams(window.location.search).get('paymentId');
+    if (paymentId) void apiFetch(`/api/payments/interledger/status?paymentId=${encodeURIComponent(paymentId)}`).then((response) => response.json()).then((value) => {
+      const data = value as { payment?: PaymentReceipt };
+      if (data.payment) setPaymentReceipt({ ...data.payment, paymentMethod: 'open_payments_test' });
+      window.history.replaceState({}, '', window.location.pathname);
+    });
   }, [locate]);
 
   const selectedShop = useMemo(() => shops.find((shop) => shop.id === selectedId) ?? shops[0] ?? null, [shops, selectedId]);
@@ -145,13 +154,12 @@ export default function Home() {
     window.open(`https://www.google.com/maps/dir/?api=1&origin=${location.latitude},${location.longitude}&destination=${destination}&travelmode=walking`, '_blank', 'noopener,noreferrer');
   }
 
-  async function reserve(drop: Drop) {
+  function reserve(drop: Drop) {
     if (!user) { setAuthOpen(true); return; }
-    const response = await apiFetch('/api/reservations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dropId: drop.id }) });
-    const data = await response.json() as { reservation?: { pickupCode: string }; error?: string };
-    if (!response.ok) return notify(data.error || 'Could not reserve this Drop.');
-    notify(`Reserved. Your pickup code is ${data.reservation?.pickupCode}.`);
-    await loadArea(location);
+    const shop = shops.find((candidate) => candidate.drops.some((candidateDrop) => candidateDrop.id === drop.id));
+    if (!shop) return notify('This Drop is no longer available.');
+    setPaymentReceipt(null);
+    setCheckout({ drop, shop });
   }
 
   async function signOut() {
@@ -234,6 +242,7 @@ export default function Home() {
       </div>}
 
       {notice && <div className="toast" role="status"><Check />{notice}</div>}
+      <InterledgerCheckout selection={checkout} receipt={paymentReceipt} onClose={() => { setCheckout(null); setPaymentReceipt(null); }} onComplete={(receipt) => { setPaymentReceipt(receipt); void loadArea(location); }} />
     </main>
   );
 }

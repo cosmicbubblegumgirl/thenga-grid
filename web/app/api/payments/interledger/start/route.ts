@@ -19,18 +19,29 @@ export async function POST(request: Request) {
 
   const body = await request.json<Record<string, unknown>>();
   const senderWallet = validWalletAddress(body.senderWalletAddress);
-  const orderReference = safeText(body.orderReference, 100);
-  const amountValue = typeof body.amountValue === 'string' ? body.amountValue : '';
-  const amountNumber = Number(amountValue);
+  const reservationId = safeText(body.reservationId, 100);
   if (!senderWallet) return json({ error: 'Enter a valid HTTPS wallet address.' }, { status: 400 });
-  if (!orderReference) return json({ error: 'Order reference is required.' }, { status: 400 });
-  if (!/^\d+$/.test(amountValue) || !Number.isSafeInteger(amountNumber) || amountNumber < 1 || amountNumber > 100_000_000) {
-    return json({ error: 'Enter a valid amount in cents.' }, { status: 400 });
+  if (!reservationId) return json({ error: 'Reservation reference is required.' }, { status: 400 });
+
+  const db = getDb();
+  const reservation = await db.prepare(`
+    SELECT reservations.id, reservations.status, drops.price_cents AS priceCents,
+      drops.shop_id AS shopId, shops.name AS shopName
+    FROM reservations
+    JOIN drops ON drops.id = reservations.drop_id
+    JOIN shops ON shops.id = drops.shop_id
+    WHERE reservations.id = ? AND reservations.customer_id = ?
+  `).bind(reservationId, user.id).first<{ id: string; status: string; priceCents: number; shopId: string; shopName: string }>();
+  if (!reservation) return json({ error: 'Reservation was not found.' }, { status: 404 });
+  if (reservation.shopId !== 'shop_mamat') return json({ error: "Open Payments testing is currently available for Mama T's Drops." }, { status: 409 });
+  if (reservation.status === 'cancelled' || reservation.status === 'collected') {
+    return json({ error: 'This reservation can no longer be paid.' }, { status: 409 });
   }
+  const amountValue = String(reservation.priceCents);
+  const orderReference = reservation.id;
 
   const paymentId = newId('ilp');
   const now = Math.floor(Date.now() / 1000);
-  const db = getDb();
   let receiverWallet = '';
   try {
     const config = getInterledgerConfig();

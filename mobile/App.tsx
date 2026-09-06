@@ -259,7 +259,8 @@ const DEMO_OWNER_DATA: OwnerData = {
       pickupCode: "1842",
       productName: "Brown bread Drop",
       customerName: "Nandi K.",
-      payment: "ILP test settled",
+      priceCents: 1500,
+      payment: "PAID · OPEN PAYMENTS",
     },
     {
       id: "order-102",
@@ -1007,6 +1008,13 @@ function CustomerOrderBar({ order }: { order: MobileOrder }) {
           <Text style={styles.pickupCodeValue}>#{order.pickupCode}</Text>
         </View>
       </View>
+      {order.payment === "interledger_test" && order.receipt ? (
+        <View style={styles.mobileReceiptRow}>
+          <View><Text style={styles.mobileReceiptLabel}>PAYMENT SETTLED</Text><Text style={styles.mobileReceiptValue}>Open Payments test transaction</Text></View>
+          <View><Text style={styles.mobileReceiptLabel}>ORDER</Text><Text style={styles.mobileReceiptValue}>{order.id}</Text></View>
+          <View><Text style={styles.mobileReceiptLabel}>AMOUNT PAID</Text><Text style={styles.mobileReceiptValue}>R{(order.amountCents / 100).toFixed(2)}</Text></View>
+        </View>
+      ) : null}
       {order.status === "sold_out" ? (
         <View style={styles.soldOutNotice}>
           <Text style={styles.soldOutTitle}>The shop marked this item sold out.</Text>
@@ -1047,7 +1055,7 @@ function CustomerOrderBar({ order }: { order: MobileOrder }) {
         <View style={styles.liveBadge}>
           <Radio size={10} color={palette.teal} />
           <Text style={styles.liveBadgeText}>
-            {order.payment === "interledger_test" ? "TEST PAID" : "PAY AT SHOP"}
+            {order.payment === "interledger_test" ? "PAID · OPEN PAYMENTS" : "PAY AT COLLECTION"}
           </Text>
         </View>
       </View>
@@ -1136,7 +1144,7 @@ function MobileCheckout({
           <View style={styles.demoNotice}>
             <ShieldCheck size={17} color={palette.teal} />
             <Text style={styles.demoNoticeText}>
-              Test payment only. No real money is charged and no private wallet key enters the app.
+              Sandbox only—no real money. No private wallet key enters the app.
             </Text>
           </View>
           <View style={styles.checkoutItem}>
@@ -1158,23 +1166,23 @@ function MobileCheckout({
               onPress={() => setMethod("interledger")}
             >
               <Radio size={18} color={palette.teal} />
-              <Text style={styles.cardTitle}>Interledger test</Text>
-              <Text style={styles.meta}>Open Payments ILP flow</Text>
+              <Text style={styles.cardTitle}>Pay with Open Payments – Test</Text>
+              <Text style={styles.meta}>Approve with a test wallet</Text>
             </Pressable>
             <Pressable
               style={[styles.checkoutTab, method === "pickup" && styles.checkoutTabActive]}
               onPress={() => setMethod("pickup")}
             >
               <Store size={18} color={palette.teal} />
-              <Text style={styles.cardTitle}>Pay at pickup</Text>
+              <Text style={styles.cardTitle}>Pay at collection</Text>
               <Text style={styles.meta}>Reserve now, pay in shop</Text>
             </Pressable>
           </View>
           {method === "interledger" ? (
             <>
               <Text style={styles.checkoutHelp}>
-                Runs wallet lookup, incoming payment, ILP quote, consent and outgoing payment with
-                play money. Live settlement uses the configured server and funded wallet.
+                Simulates wallet lookup, incoming payment, an exact ILP quote, wallet approval and
+                outgoing payment using play money.
               </Text>
               <Field
                 label="Test wallet address"
@@ -1205,7 +1213,7 @@ function MobileCheckout({
                 <Text style={styles.primaryText}>
                   {busy
                     ? "PROCESSING ILP TEST..."
-                    : `PAY R${(checkout.drop.priceCents / 100).toFixed(2)} WITH INTERLEDGER TEST`}
+                    : `PAY R${(checkout.drop.priceCents / 100).toFixed(2)} WITH TEST WALLET`}
                 </Text>
                 <ArrowRight size={17} color="#fff" />
               </Pressable>
@@ -1599,7 +1607,7 @@ function OrderPackingCard({
           <View style={styles.packingStatusDot} />
           <Text style={styles.packingStatusText}>{STATUS_LABELS[order.status].toUpperCase()}</Text>
         </View>
-        {order.payment ? <Text style={styles.paymentTag}>{order.payment}</Text> : null}
+        {order.payment ? <Text style={styles.paymentTag}>{order.payment}{order.priceCents ? ` · R${(order.priceCents / 100).toFixed(2)} RECEIVED` : ""}</Text> : null}
         {saving ? <ActivityIndicator size="small" color={palette.teal} /> : null}
       </View>
       <Text style={styles.controlLabel}>MOVE ORDER TO</Text>
@@ -2652,6 +2660,9 @@ const styles = StyleSheet.create({
   orderTrackerLabel: { color: palette.teal, fontSize: 7, fontWeight: "900", letterSpacing: 0.8 },
   orderTrackerTitle: { marginTop: 2, color: palette.ink, fontSize: 15, fontWeight: "900" },
   orderTrackerMeta: { marginTop: 1, color: palette.grey, fontSize: 8 },
+  mobileReceiptRow: { flexDirection: "row", gap: 7, marginTop: 10, padding: 9, backgroundColor: palette.softTeal, borderRadius: 11 },
+  mobileReceiptLabel: { color: palette.teal, fontSize: 6, fontWeight: "900", letterSpacing: 0.5 },
+  mobileReceiptValue: { color: palette.ink, fontSize: 7, fontWeight: "700", marginTop: 2, maxWidth: 100 },
   pickupCodePill: {
     paddingHorizontal: 9,
     paddingVertical: 6,
