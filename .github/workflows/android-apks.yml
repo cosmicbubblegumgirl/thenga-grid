@@ -22,11 +22,11 @@ jobs:
           - variant: customer
             role: customer
             label: Customer
-            filename: THENGA-GRID-Customer-v2.0.0.apk
+            filename: THENGA-GRID-Customer-v2.1.0-arm64.apk
           - variant: merchant
             role: owner
             label: Shop-Owner
-            filename: THENGA-GRID-Shop-Owner-v2.0.0.apk
+            filename: THENGA-GRID-Shop-Owner-v2.1.0-arm64.apk
 
     steps:
       - name: Check out source
@@ -66,7 +66,9 @@ jobs:
 
       - name: Compile signed installable package
         working-directory: mobile/android
-        run: ./gradlew assembleRelease --no-daemon
+        env:
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+        run: ./gradlew assembleRelease --no-daemon --max-workers=2
 
       - name: Name release package
         run: cp mobile/android/app/build/outputs/apk/release/app-release.apk "${{ matrix.filename }}"
