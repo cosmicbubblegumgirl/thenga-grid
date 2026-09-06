@@ -43,6 +43,8 @@ pnpm run build:pages
 
 The Pages build preserves the customer and shop-owner experiences using fictional seed data stored in the visitor's browser. It does not submit credentials or demo changes to a server. The Cloudflare worker build remains the production path for shared accounts, persistent data, live OpenStreetMap discovery and real integrations.
 
+The contents of `web/dist-pages` are published from the repository's `gh-pages` branch.
+
 The database schema is in `web/db/schema.ts`; generated migrations are in `web/drizzle`. Authentication uses salted PBKDF2 password hashes and revocable HTTP-only sessions. Seed records are inserted only into an empty database.
 
 ## Mobile apps
