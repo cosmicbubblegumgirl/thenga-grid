@@ -127,7 +127,7 @@ function createDemoState(): DemoState {
       { id: 'post_4', authorName: 'Bidstone Pantry', body: 'New vegetable delivery has arrived near 88 Bidstone Road.', shopName: 'Bidstone Pantry', createdAt: now - 1740, area: 'ramsgate' },
     ],
     orders: [
-      { id: 'order_soweto_new', shopId: 'shop_mamat', status: 'reserved', pickupCode: '4821', productName: 'Fresh white bread', customerName: 'Nandi Khumalo', priceCents: 1500, paymentStatus: 'settled', paymentMethod: 'open_payments_test', paidAmountValue: '1500' },
+      { id: 'order_soweto_new', shopId: 'shop_mamat', status: 'reserved', pickupCode: '4821', productName: 'Fresh white bread', customerName: 'Nandi Khumalo', priceCents: 1500, paymentStatus: 'simulated_completed', paymentMethod: 'simulated_test_payment', paidAmountValue: '1500' },
       { id: 'order_soweto_packing', shopId: 'shop_mamat', status: 'packing', pickupCode: '1764', productName: 'Full cream milk 1L', customerName: 'Thabo Mokoena', priceCents: 2199 },
       { id: 'order_ramsgate_new', shopId: 'shop_harbour', status: 'reserved', pickupCode: '5932', productName: 'Fresh white bread', customerName: 'Ayesha Naidoo', priceCents: 1450 },
       { id: 'order_ramsgate_ready', shopId: 'shop_harbour', status: 'ready', pickupCode: '8046', productName: 'Large eggs 6-pack', customerName: 'Sipho Cele', priceCents: 2450 },
@@ -300,12 +300,13 @@ async function demoFetch(rawUrl: string, init?: RequestInit): Promise<Response> 
     const shop = state.shops.find((candidate) => candidate.drops.some((drop) => drop.id === body.dropId));
     const drop = shop?.drops.find((candidate) => candidate.id === body.dropId);
     if (!shop || !drop || drop.quantity < 1 || drop.expiresAt <= Math.floor(Date.now() / 1000)) return json({ error: 'This drop is no longer available.' }, 409);
-    drop.quantity -= 1;
+    const testPayment = body.paymentMethod === 'open_payments_test';
+    if (!testPayment) drop.quantity -= 1;
     const pickupCode = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
     const reservationId = id('res');
-    state.orders.push({ id: reservationId, shopId: shop.id, status: 'reserved', pickupCode, productName: drop.productName, customerName: current.displayName, customerId: current.id, priceCents: drop.priceCents });
+    state.orders.push({ id: reservationId, shopId: shop.id, status: testPayment ? 'awaiting_payment' : 'reserved', pickupCode, productName: drop.productName, customerName: current.displayName, customerId: current.id, priceCents: drop.priceCents });
     saveState(state);
-    return json({ reservation: { id: reservationId, status: 'reserved', pickupCode, expiresAt: Math.floor(Date.now() / 1000) + 900 } }, 201);
+    return json({ reservation: { id: reservationId, status: testPayment ? 'awaiting_payment' : 'reserved', pickupCode, expiresAt: Math.floor(Date.now() / 1000) + 900 } }, 201);
   }
   if (url.pathname.endsWith('/api/payments/interledger/start') && method === 'POST') {
     if (!current || current.role !== 'customer') return json({ error: 'Sign in with a customer account to pay.' }, 401);
@@ -315,6 +316,8 @@ async function demoFetch(rawUrl: string, init?: RequestInit): Promise<Response> 
     if (!/^https:\/\/[^\s/]+\/.+/.test(wallet)) return json({ error: 'Enter a valid HTTPS wallet address.' }, 400);
     const order = state.orders.find((candidate) => candidate.id === reservationId && candidate.customerId === current.id);
     if (!order) return json({ error: 'Reservation was not found.' }, 404);
+    if (order.status !== 'awaiting_payment') return json({ error: 'This reservation is not awaiting a test payment.' }, 409);
+    if (state.payments.some((candidate) => candidate.orderReference === order.id)) return json({ error: 'A payment is already in progress for this reservation.' }, 409);
     const payment: DemoPayment = { id: id('ilp'), userId: current.id, orderReference: order.id, amountValue: String(order.priceCents), assetCode: 'ZAR', assetScale: 2, status: 'awaiting_consent', senderWallet: wallet, createdAt: Math.floor(Date.now() / 1000) };
     state.payments.push(payment); saveState(state);
     return json({ paymentId: payment.id, status: payment.status, simulated: true, quote: { debitAmount: { value: payment.amountValue, assetCode: 'ZAR', assetScale: 2 }, receiveAmount: { value: payment.amountValue, assetCode: 'ZAR', assetScale: 2 } } }, 201);
@@ -324,11 +327,11 @@ async function demoFetch(rawUrl: string, init?: RequestInit): Promise<Response> 
     const body = await bodyOf(init);
     const payment = state.payments.find((candidate) => candidate.id === body.paymentId && candidate.userId === current.id);
     if (!payment) return json({ error: 'Payment was not found.' }, 404);
-    payment.status = 'settled';
+    payment.status = 'simulated_completed';
     const order = state.orders.find((candidate) => candidate.id === payment.orderReference)!;
-    order.paymentStatus = 'settled'; order.paymentMethod = 'open_payments_test'; order.paidAmountValue = payment.amountValue;
+    order.status = 'reserved'; order.paymentStatus = 'simulated_completed'; order.paymentMethod = 'simulated_test_payment'; order.paidAmountValue = payment.amountValue;
     const shop = state.shops.find((candidate) => candidate.id === order.shopId)!; saveState(state);
-    return json({ payment: { id: payment.id, orderReference: order.id, amountValue: payment.amountValue, assetCode: payment.assetCode, status: payment.status, pickupCode: order.pickupCode, productName: order.productName, shopName: shop.name, latitude: shop.latitude, longitude: shop.longitude, paymentMethod: 'open_payments_test' } });
+    return json({ payment: { id: payment.id, orderReference: order.id, amountValue: payment.amountValue, assetCode: payment.assetCode, status: payment.status, pickupCode: order.pickupCode, productName: order.productName, shopName: shop.name, latitude: shop.latitude, longitude: shop.longitude, paymentMethod: 'simulated_test_payment' } });
   }
   if (url.pathname.endsWith('/api/payments/interledger/status') && method === 'GET') {
     const payment = state.payments.find((candidate) => candidate.id === url.searchParams.get('paymentId') && candidate.userId === current?.id);

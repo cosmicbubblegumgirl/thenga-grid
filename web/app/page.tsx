@@ -53,7 +53,7 @@ export default function Home() {
   const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceipt | null>(null);
 
   const notify = useCallback((message: string) => {
-    setNotice(message);
+    setNotice(isStaticDemo ? `Demo data — ${message}` : message);
     window.setTimeout(() => setNotice(''), 3200);
   }, []);
 
@@ -122,10 +122,12 @@ export default function Home() {
     const savedMode = window.localStorage.getItem('tg_easy_mode');
     if (savedMode === 'on') setEasyMode(true);
     locate(false);
-    const paymentId = new URLSearchParams(window.location.search).get('paymentId');
+    const paymentParams = new URLSearchParams(window.location.search);
+    const paymentId = paymentParams.get('paymentId');
+    const returnedPaymentState = paymentParams.get('payment');
     if (paymentId) void apiFetch(`/api/payments/interledger/status?paymentId=${encodeURIComponent(paymentId)}`).then((response) => response.json()).then((value) => {
       const data = value as { payment?: PaymentReceipt };
-      if (data.payment) setPaymentReceipt({ ...data.payment, paymentMethod: 'open_payments_test' });
+      if (data.payment) setPaymentReceipt({ ...data.payment, status: returnedPaymentState === 'ilp-failed' ? 'failed' : data.payment.status, paymentMethod: 'open_payments_test' });
       window.history.replaceState({}, '', window.location.pathname);
     });
   }, [locate]);
@@ -215,6 +217,8 @@ export default function Home() {
         {user ? <div className="account-menu"><button><span>{user.displayName.split(/\s+/).map((word) => word[0]).slice(0, 2).join('')}</span><i /><b>{user.displayName}</b></button><button onClick={() => void signOut()} aria-label="Sign out"><LogOut /></button></div> : <Button className="signin-button" onClick={() => setAuthOpen(true)}><UserRound /> Sign in</Button>}
       </header>
 
+      <aside className="prototype-notice" role="note"><span>DEMO DATA</span> THENGA//GRID is a hackathon prototype. Shops, products, prices, locations, stock levels, reviews and orders shown in this demo may be fictional.</aside>
+
       {isStaticDemo && <section className="demo-toolbar" aria-label="Demo controls">
         <div className="demo-toolbar-copy"><span><Radio /></span><div><small>EXPLORE THE LIVE DEMO</small><strong>Choose a neighbourhood and view</strong></div></div>
         <div className="demo-switch-group"><small>AREA</small><div>{DEMO_AREAS.map((area) => <button key={area.id} className={activeDemoArea === area.id ? 'active' : ''} onClick={() => void selectDemoArea(area)}><MapPin /><span><strong>{area.label}</strong><small>{area.detail}</small></span></button>)}</div></div>
@@ -242,7 +246,7 @@ export default function Home() {
       </div>}
 
       {notice && <div className="toast" role="status"><Check />{notice}</div>}
-      <InterledgerCheckout selection={checkout} receipt={paymentReceipt} onClose={() => { setCheckout(null); setPaymentReceipt(null); }} onComplete={(receipt) => { setPaymentReceipt(receipt); void loadArea(location); }} />
+      <InterledgerCheckout selection={checkout} receipt={paymentReceipt} easyMode={easyMode} onClose={() => { setCheckout(null); setPaymentReceipt(null); }} onComplete={(receipt) => { setPaymentReceipt(receipt); void loadArea(location); }} />
     </main>
   );
 }
@@ -254,7 +258,7 @@ function GridView({ location, locationName, locationStatus, shops, selectedShop,
   const demoArea = locationName.toLowerCase().includes('ramsgate') ? 'Ramsgate Beach' : 'Soweto';
   return <div className="grid-view">
     <section className="map-panel">
-      <div className="map-toolbar"><div><span className="live-dot" /><strong>{locationStatus === 'live' ? 'Grid live around you' : `${demoArea} demo Grid`}</strong><small>{shops.length} shops found near {locationName}</small></div><Button variant="outline" onClick={onLocate}><LocateFixed /> Use my location</Button></div>
+      <div className="map-toolbar"><div><span className="live-dot" /><strong>{locationStatus === 'live' ? 'Grid live around you' : `${demoArea} demo Grid`} <em className="demo-data-badge">DEMO DATA</em></strong><small>{shops.length} demo shops near {locationName}</small></div><Button variant="outline" onClick={onLocate}><LocateFixed /> Use my location</Button></div>
       <div className="map-frame">{loading ? <div className="map-loading"><Radio /><strong>Reading the neighbourhood signal…</strong></div> : <LiveMap shops={shops} selectedId={selectedId} location={location} onSelect={onSelect} />}</div>
       <div className="map-legend"><span><i className="connected" />Connected shop</span><span><i />Nearby OpenStreetMap listing</span><small>Map and local listings © OpenStreetMap contributors</small></div>
     </section>
@@ -266,23 +270,23 @@ function ShopSignal({ shop, saved, onDirections, onFavourite, onReserve, notify 
   const connected = !shop.source;
   return <div className="signal-content">
     <div className="signal-kicker"><Radio /><span>SHOP SIGNAL</span><b>{connected ? 'STRONG' : 'DISCOVERED'}</b></div>
-    <div className="signal-title"><span className="shop-avatar">{shop.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toUpperCase()}</span><div><h1>{shop.name}</h1><p><MapPin /> {shop.distanceKm ? `${shop.distanceKm} km away · ` : ''}{shop.openingHours}</p></div><button className={saved ? 'saved' : ''} onClick={onFavourite}><Heart /></button></div>
+    <div className="signal-title"><span className="shop-avatar">{shop.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join('').toUpperCase()}</span><div><h1>{shop.name} <em className="demo-data-badge">DEMO DATA</em></h1><p><MapPin /> {shop.distanceKm ? `${shop.distanceKm} km away · ` : ''}{shop.openingHours}</p></div><button className={saved ? 'saved' : ''} onClick={onFavourite}><Heart /></button></div>
     {connected ? <>
-      <div className="rating-row"><span>▣▣▣▣▣</span><strong>{shop.rating.toFixed(1)} CRATES</strong><small>{shop.verified && <><ShieldCheck /> Verified</>}</small></div>
-      <section className="live-stock"><header><strong>Live stock</strong><span>Updated recently</span></header>{shop.inventory.slice(0, 6).map((item) => <div key={item.id}><span>{item.name}</span><i className={item.quantity < 5 ? 'low' : ''} /><b>{item.quantity}</b><strong>R{(item.priceCents / 100).toFixed(2)}</strong></div>)}{!shop.inventory.length && <p>No stock published yet.</p>}</section>
+      <div className="rating-row"><span>▣▣▣▣▣</span><strong>{shop.rating.toFixed(1)} CRATES <em className="demo-data-badge">DEMO DATA</em></strong><small>{shop.verified && <><ShieldCheck /> Demo listing</>}</small></div>
+      <section className="live-stock"><header><strong>Stock <em className="demo-data-badge">DEMO DATA</em></strong><span>Seeded availability</span></header>{shop.inventory.slice(0, 6).map((item) => <div key={item.id}><span>{item.name}</span><i className={item.quantity < 5 ? 'low' : ''} /><b>{item.quantity}</b><strong>R{(item.priceCents / 100).toFixed(2)}</strong></div>)}{!shop.inventory.length && <p>No stock published yet.</p>}</section>
       <div className="pickup-row"><div><Clock3 /><span><small>Average pickup</small><strong>{shop.pickupMinutes} min</strong></span></div><div><PackageCheck /><span><small>Grab & Go</small><strong>On</strong></span></div></div>
-      {shop.drops[0] && <div className="live-drop"><div><span><Flame /> LIVE DROP</span><small>{shop.drops[0].quantity} remaining</small></div><h2>{shop.drops[0].productName}</h2><p><del>R{(shop.drops[0].originalPriceCents / 100).toFixed(2)}</del><strong>R{(shop.drops[0].priceCents / 100).toFixed(2)}</strong></p><Button onClick={() => onReserve(shop.drops[0])}>Reserve for 15 min</Button></div>}
+      {shop.drops[0] && <div className="live-drop"><div><span><Flame /> DEMO DROP</span><small>{shop.drops[0].quantity} demo units</small></div><h2>{shop.drops[0].productName}</h2><p><del>R{(shop.drops[0].originalPriceCents / 100).toFixed(2)}</del><strong>R{(shop.drops[0].priceCents / 100).toFixed(2)}</strong></p><Button onClick={() => onReserve(shop.drops[0])}>Reserve for 15 min</Button></div>}
     </> : <div className="unconnected-card"><Store /><h2>Not connected yet</h2><p>This real nearby listing comes from OpenStreetMap. Prices, stock and reservations appear once the owner joins THENGA//GRID.</p></div>}
     <div className="signal-actions"><Button onClick={onDirections}><Navigation /> Take me there</Button><Button variant="outline" onClick={() => notify(`Walk With Me link prepared for ${shop.name}.`)}><ShieldCheck /> Walk With Me</Button></div>
   </div>;
 }
 
 function BasketView({ query, setQuery, results, onDirections, notify }: { query: string; setQuery: (value: string) => void; results: Array<{ shop: Shop; total: number; found: number; requested: number }>; onDirections: (shop: Shop) => void; notify: (message: string) => void }) {
-  return <div className="feature-page"><header className="feature-heading"><div><p className="eyebrow">BASKET BATTLE</p><h1>Your whole run, compared.</h1><p>THENGA//GRID compares the basket—not a single teaser price.</p></div><CircleDollarSign /></header><form className="basket-search" onSubmit={(event) => { event.preventDefault(); notify('Basket results refreshed.'); }}><Search /><Input value={query} onChange={(event) => setQuery(event.target.value)} /><Button type="submit">Compare</Button></form><div className="route-results">{results.slice(0, 5).map((result, index) => <article className={index === 0 ? 'best' : ''} key={result.shop.id}><div className="route-badge">{index === 0 ? <CircleDollarSign /> : index === 1 ? <Zap /> : <Heart />}</div><div><small>{index === 0 ? 'CHEAP RUN' : index === 1 ? 'QUICK RUN' : 'COMMUNITY PICK'}</small><h2>{result.shop.name}</h2><p>{result.found}/{result.requested} requested items found · {result.shop.pickupMinutes} min pickup</p></div><span><small>Basket total</small><strong>R{(result.total / 100).toFixed(2)}</strong></span><Button onClick={() => onDirections(result.shop)}>Take me there <Navigation /></Button></article>)}{!results.length && <div className="feature-empty"><ShoppingBasket /><h2>No connected shop matches that basket yet</h2><p>Post a Neighbourhood Request so nearby merchants can respond.</p></div>}</div><section className="price-shock"><Zap /><div><small>PRICE SHOCK</small><strong>Egg prices vary by up to R5 nearby</strong><p>Lowest connected price: R21.99 at Lwazi Market.</p></div><ChevronRight /></section></div>;
+  return <div className="feature-page"><header className="feature-heading"><div><p className="eyebrow">BASKET BATTLE · DEMO DATA</p><h1>Your whole run, compared.</h1><p>Prototype comparison using seeded products, prices and routes.</p></div><CircleDollarSign /></header><form className="basket-search" onSubmit={(event) => { event.preventDefault(); notify('Basket results refreshed.'); }}><Search /><Input value={query} onChange={(event) => setQuery(event.target.value)} /><Button type="submit">Compare</Button></form><div className="route-results">{results.slice(0, 5).map((result, index) => <article className={index === 0 ? 'best' : ''} key={result.shop.id}><div className="route-badge">{index === 0 ? <CircleDollarSign /> : index === 1 ? <Zap /> : <Heart />}</div><div><small>{index === 0 ? 'DEMO BASKET RUN' : index === 1 ? 'DEMO QUICK RUN' : 'DEMO COMMUNITY PICK'}</small><h2>{result.shop.name}</h2><p>{result.found}/{result.requested} demo items · {result.shop.pickupMinutes} min demo pickup</p></div><span><small>Demo basket total</small><strong>R{(result.total / 100).toFixed(2)}</strong></span><Button onClick={() => onDirections(result.shop)}>View demo route <Navigation /></Button></article>)}{!results.length && <div className="feature-empty"><ShoppingBasket /><h2>No demo shop matches that basket yet</h2><p>Post a Neighbourhood Request so nearby demo merchants can respond.</p></div>}</div><section className="price-shock"><Zap /><div><small>DEMO PRICE COMPARISON</small><strong>Seeded prices can vary nearby</strong><p>Figures shown here are prototype data.</p></div><ChevronRight /></section></div>;
 }
 
 function DropsView({ drops, onReserve, onDirections }: { drops: Array<Drop & { shop: Shop }>; onReserve: (drop: Drop) => void; onDirections: (shop: Shop) => void }) {
-  return <div className="feature-page"><header className="feature-heading drops-heading"><div><p className="eyebrow">DROPS</p><h1>Fresh deals. Right now.</h1><p>Reserve limited local specials before you walk.</p></div><Flame /></header><div className="drop-grid">{drops.map((drop) => <article key={drop.id}><div className="drop-art"><span>{drop.kind === 'last_crate' ? 'LAST CRATE' : `${drop.shop.name.toUpperCase()} JUST DROPPED`}</span><Flame /></div><div className="drop-body"><p><MapPin /> {drop.shop.name}</p><h2>{drop.productName}</h2><div><del>R{(drop.originalPriceCents / 100).toFixed(2)}</del><strong>R{(drop.priceCents / 100).toFixed(2)}</strong></div><small>{drop.quantity} remaining · expires today</small><Button onClick={() => onReserve(drop)}>Reserve</Button><button onClick={() => onDirections(drop.shop)}>View route <ArrowRight /></button></div></article>)}</div></div>;
+  return <div className="feature-page"><header className="feature-heading drops-heading"><div><p className="eyebrow">DROPS · DEMO DATA</p><h1>Prototype deals.</h1><p>Seeded specials and availability for the hackathon demonstration.</p></div><Flame /></header><div className="drop-grid">{drops.map((drop) => <article key={drop.id}><div className="drop-art"><span>{drop.kind === 'last_crate' ? 'DEMO LAST CRATE' : `${drop.shop.name.toUpperCase()} · DEMO DROP`}</span><Flame /></div><div className="drop-body"><p><MapPin /> {drop.shop.name} <em className="demo-data-badge">DEMO DATA</em></p><h2>{drop.productName}</h2><div><del>R{(drop.originalPriceCents / 100).toFixed(2)}</del><strong>R{(drop.priceCents / 100).toFixed(2)}</strong></div><small>{drop.quantity} demo units · prototype expiry</small><Button onClick={() => onReserve(drop)}>Reserve</Button><button onClick={() => onDirections(drop.shop)}>View demo route <ArrowRight /></button></div></article>)}</div></div>;
 }
 
 function CommunityView({ posts, location, notify }: { posts: CommunityPost[]; location: Position; notify: (message: string) => void }) {

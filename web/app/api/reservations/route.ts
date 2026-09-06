@@ -24,15 +24,18 @@ export async function POST(request: Request) {
   if (user.role !== 'customer') return json({ error: 'Use a customer account to make reservations.' }, { status: 403 });
   const body = await request.json<Record<string, unknown>>();
   const dropId = safeText(body.dropId, 100);
+  const testPayment = body.paymentMethod === 'open_payments_test';
   const db = getDb();
   const drop = await db.prepare('SELECT id, quantity, expires_at AS expiresAt FROM drops WHERE id = ?').bind(dropId).first<{ id: string; quantity: number; expiresAt: number }>();
   const now = Math.floor(Date.now() / 1000);
   if (!drop || drop.quantity < 1 || drop.expiresAt <= now) return json({ error: 'This drop is no longer available.' }, { status: 409 });
   const id = newId('res');
   const pickupCode = String(crypto.getRandomValues(new Uint32Array(1))[0] % 10_000).padStart(4, '0');
-  await db.batch([
-    db.prepare(`INSERT INTO reservations (id, customer_id, drop_id, status, pickup_code, expires_at, created_at) VALUES (?, ?, ?, 'reserved', ?, ?, ?)`).bind(id, user.id, dropId, pickupCode, now + 900, now),
-    db.prepare('UPDATE drops SET quantity = quantity - 1 WHERE id = ? AND quantity > 0').bind(dropId),
-  ]);
-  return json({ reservation: { id, status: 'reserved', pickupCode, expiresAt: now + 900 } }, { status: 201 });
+  const status = testPayment ? 'awaiting_payment' : 'reserved';
+  const statements = [
+    db.prepare(`INSERT INTO reservations (id, customer_id, drop_id, status, pickup_code, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(id, user.id, dropId, status, pickupCode, now + 900, now),
+  ];
+  if (!testPayment) statements.push(db.prepare('UPDATE drops SET quantity = quantity - 1 WHERE id = ? AND quantity > 0').bind(dropId));
+  await db.batch(statements);
+  return json({ reservation: { id, status, pickupCode, expiresAt: now + 900 } }, { status: 201 });
 }

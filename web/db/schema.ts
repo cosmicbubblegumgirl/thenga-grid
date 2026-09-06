@@ -105,6 +105,7 @@ export const interledgerPayments = sqliteTable('interledger_payments', {
   assetScale: integer('asset_scale').notNull().default(2),
   senderWallet: text('sender_wallet').notNull(),
   receiverWallet: text('receiver_wallet').notNull(),
+  returnUri: text('return_uri'),
   incomingPaymentUrl: text('incoming_payment_url'),
   quoteUrl: text('quote_url'),
   outgoingPaymentUrl: text('outgoing_payment_url'),

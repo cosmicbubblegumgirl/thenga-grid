@@ -69,6 +69,7 @@ export function AuthScreen({ location, locationName, onClose, onAuthenticated, o
             <li><Check /> Location-aware routes and shop discovery</li>
             <li><Check /> Secure account and reservation history</li>
           </ul>
+          {isStaticDemo && <p className="auth-prototype-notice"><b>DEMO DATA</b> This hackathon prototype uses fictional shops, products, people, prices, locations and orders.</p>}
         </div>
         <div className="auth-location"><MapPin /><span><small>Grid location</small><strong>{locationName}</strong></span></div>
       </section>

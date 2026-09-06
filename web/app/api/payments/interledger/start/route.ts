@@ -20,8 +20,18 @@ export async function POST(request: Request) {
   const body = await request.json<Record<string, unknown>>();
   const senderWallet = validWalletAddress(body.senderWalletAddress);
   const reservationId = safeText(body.reservationId, 100);
+  const requestedReturnUri = safeText(body.returnUri, 500);
   if (!senderWallet) return json({ error: 'Enter a valid HTTPS wallet address.' }, { status: 400 });
   if (!reservationId) return json({ error: 'Reservation reference is required.' }, { status: 400 });
+  let returnUri: string | null = null;
+  if (requestedReturnUri) {
+    try {
+      const candidate = new URL(requestedReturnUri);
+      const sameWebOrigin = candidate.origin === new URL(request.url).origin;
+      if ((candidate.protocol === 'thengagrid:' && candidate.hostname === 'payment') || sameWebOrigin) returnUri = candidate.toString();
+      else return json({ error: 'The payment return address is not allowed.' }, { status: 400 });
+    } catch { return json({ error: 'The payment return address is invalid.' }, { status: 400 }); }
+  }
 
   const db = getDb();
   const reservation = await db.prepare(`
@@ -34,9 +44,11 @@ export async function POST(request: Request) {
   `).bind(reservationId, user.id).first<{ id: string; status: string; priceCents: number; shopId: string; shopName: string }>();
   if (!reservation) return json({ error: 'Reservation was not found.' }, { status: 404 });
   if (reservation.shopId !== 'shop_mamat') return json({ error: "Open Payments testing is currently available for Mama T's Drops." }, { status: 409 });
-  if (reservation.status === 'cancelled' || reservation.status === 'collected') {
+  if (reservation.status !== 'awaiting_payment') {
     return json({ error: 'This reservation can no longer be paid.' }, { status: 409 });
   }
+  const existing = await db.prepare(`SELECT id, status FROM interledger_payments WHERE order_reference = ?`).bind(reservation.id).first<{ id: string; status: string }>();
+  if (existing) return json({ error: 'A payment is already in progress for this reservation.', paymentId: existing.id, status: existing.status }, { status: 409 });
   const amountValue = String(reservation.priceCents);
   const orderReference = reservation.id;
 
@@ -48,9 +60,9 @@ export async function POST(request: Request) {
     receiverWallet = config.receiverWalletAddress;
     await db.prepare(`
       INSERT INTO interledger_payments
-      (id, user_id, order_reference, amount_value, asset_code, asset_scale, sender_wallet, receiver_wallet, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'ZAR', 2, ?, ?, 'starting', ?, ?)
-    `).bind(paymentId, user.id, orderReference, amountValue, senderWallet, receiverWallet, now, now).run();
+      (id, user_id, order_reference, amount_value, asset_code, asset_scale, sender_wallet, receiver_wallet, return_uri, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'ZAR', 2, ?, ?, ?, 'starting', ?, ?)
+    `).bind(paymentId, user.id, orderReference, amountValue, senderWallet, receiverWallet, returnUri, now, now).run();
 
     const client = await createInterledgerClient(config);
     const [sender, receiver] = await Promise.all([

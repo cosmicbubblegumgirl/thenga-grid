@@ -11,10 +11,12 @@ type PaymentRow = {
   clientNonce: string;
   interactNonce: string;
   status: string;
+  orderReference: string;
+  returnUri: string | null;
 };
 
-function paymentRedirect(request: Request, status: 'success' | 'failed', paymentId: string) {
-  const url = new URL('/', request.url);
+function paymentRedirect(request: Request, status: 'success' | 'failed', paymentId: string, returnUri: string | null) {
+  const url = returnUri ? new URL(returnUri) : new URL('/', request.url);
   url.searchParams.set('payment', `ilp-${status}`);
   url.searchParams.set('paymentId', paymentId);
   return Response.redirect(url.toString(), 303);
@@ -31,7 +33,7 @@ export async function GET(request: Request) {
   const payment = await db.prepare(`
     SELECT id, sender_wallet AS senderWallet, quote_url AS quoteUrl, auth_server AS authServer,
       continue_uri AS continueUri, continue_token AS continueToken, client_nonce AS clientNonce,
-      interact_nonce AS interactNonce, status
+      interact_nonce AS interactNonce, status, order_reference AS orderReference, return_uri AS returnUri
     FROM interledger_payments WHERE id = ?
   `).bind(paymentId).first<PaymentRow>();
   if (!payment || payment.status !== 'awaiting_consent') return new Response('Payment is not awaiting consent.', { status: 409 });
@@ -59,16 +61,18 @@ export async function GET(request: Request) {
         metadata: { description: 'THENGA GRID pickup order', externalRef: payment.id },
       },
     );
-    await db.prepare(`
-      UPDATE interledger_payments SET outgoing_payment_url = ?, status = 'settled',
-        continue_token = NULL, updated_at = ? WHERE id = ?
-    `).bind(outgoingPayment.id, Math.floor(Date.now() / 1000), paymentId).run();
-    return paymentRedirect(request, 'success', paymentId);
+    const now = Math.floor(Date.now() / 1000);
+    await db.batch([
+      db.prepare(`UPDATE interledger_payments SET outgoing_payment_url = ?, status = 'settled', continue_token = NULL, updated_at = ? WHERE id = ?`).bind(outgoingPayment.id, now, paymentId),
+      db.prepare(`UPDATE reservations SET status = 'reserved' WHERE id = ? AND status = 'awaiting_payment'`).bind(payment.orderReference),
+      db.prepare(`UPDATE drops SET quantity = quantity - 1 WHERE id = (SELECT drop_id FROM reservations WHERE id = ?) AND quantity > 0`).bind(payment.orderReference),
+    ]);
+    return paymentRedirect(request, 'success', paymentId, payment.returnUri);
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 300) : 'Payment continuation failed.';
     await db.prepare(`UPDATE interledger_payments SET status = 'failed', error = ?, continue_token = NULL, updated_at = ? WHERE id = ?`)
       .bind(message, Math.floor(Date.now() / 1000), paymentId).run();
     console.error('Interledger payment continuation failed', { paymentId, error });
-    return paymentRedirect(request, 'failed', paymentId);
+    return paymentRedirect(request, 'failed', paymentId, payment.returnUri);
   }
 }

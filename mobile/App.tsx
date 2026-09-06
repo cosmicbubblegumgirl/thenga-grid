@@ -93,6 +93,9 @@ type OwnerData = {
     priceCents?: number;
     createdAt?: number;
     payment?: string;
+    paymentStatus?: string;
+    paymentMethod?: string;
+    paidAmountValue?: string;
   }>;
   demand: Array<{ query: string; searches: number }>;
 };
@@ -115,7 +118,7 @@ type MobileOrder = {
   amountCents: number;
   pickupCode: string;
   status: OrderStatus;
-  payment: "pickup" | "interledger_test";
+  payment: "pickup" | "interledger_test" | "open_payments_test";
   latitude: number;
   longitude: number;
   receipt?: InterledgerReceipt;
@@ -260,7 +263,7 @@ const DEMO_OWNER_DATA: OwnerData = {
       productName: "Brown bread Drop",
       customerName: "Nandi K.",
       priceCents: 1500,
-      payment: "PAID · OPEN PAYMENTS",
+      payment: "SIMULATED TEST PAYMENT",
     },
     {
       id: "order-102",
@@ -631,6 +634,10 @@ function Field(props: React.ComponentProps<typeof TextInput> & { label: string }
   );
 }
 
+function PrototypeNotice() {
+  return <View style={styles.prototypeNotice}><Text style={styles.prototypeNoticeTag}>DEMO DATA</Text><Text style={styles.prototypeNoticeText}>THENGA//GRID is a hackathon prototype. Shops, products, prices, locations, stock levels, reviews and orders shown in this demo may be fictional.</Text></View>;
+}
+
 function CustomerApp({
   user,
   position,
@@ -652,6 +659,25 @@ function CustomerApp({
   const [easy, setEasy] = useState(false);
   const [checkout, setCheckout] = useState<CheckoutDrop | null>(null);
   const [activeOrder, setActiveOrder] = useState<MobileOrder | null>(null);
+
+  useEffect(() => {
+    if (LOCAL_DEMO) return;
+    const handleReturn = (url: string | null) => {
+      if (!url) return;
+      const paymentId = new URL(url).searchParams.get("paymentId");
+      const result = new URL(url).searchParams.get("payment");
+      if (!paymentId) return;
+      if (result === "ilp-failed") { Alert.alert("Test payment was not completed", "No real money was charged. You can try the sandbox journey again."); return; }
+      void api<{ payment: { id: string; status: string; orderReference: string; pickupCode: string; productName: string; shopName: string; amountValue: string; latitude: number; longitude: number } }>(`/api/payments/interledger/status?paymentId=${encodeURIComponent(paymentId)}`).then(({ payment }) => {
+        if (payment.status !== "settled") return;
+        setActiveOrder({ id: payment.orderReference, shopName: payment.shopName, productName: payment.productName, amountCents: Number(payment.amountValue), pickupCode: payment.pickupCode, status: "reserved", payment: "open_payments_test", latitude: payment.latitude, longitude: payment.longitude });
+        Alert.alert("Payment settled", "OPEN PAYMENTS · TEST\nSandbox transaction—no real funds transferred.");
+      }).catch(() => Alert.alert("Payment status unavailable", "The sandbox payment result could not be read yet."));
+    };
+    void Linking.getInitialURL().then(handleReturn);
+    const subscription = Linking.addEventListener("url", ({ url }) => handleReturn(url));
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (!activeOrder || ["ready", "sold_out", "collected", "cancelled"].includes(activeOrder.status))
@@ -789,6 +815,18 @@ function CustomerApp({
     }
     setCheckout(null);
   }
+  async function startSecureTestPayment(wallet: string) {
+    if (!checkout) return;
+    try {
+      const reservation = await api<{ reservation: { id: string } }>("/api/reservations", { method: "POST", body: JSON.stringify({ dropId: checkout.drop.id, paymentMethod: "open_payments_test" }) });
+      const started = await api<{ redirect?: string; error?: string }>("/api/payments/interledger/start", { method: "POST", body: JSON.stringify({ reservationId: reservation.reservation.id, senderWalletAddress: wallet, returnUri: "thengagrid://payment" }) });
+      if (!started.redirect) throw new Error(started.error || "The secure sandbox payment could not be started.");
+      setCheckout(null);
+      await Linking.openURL(started.redirect);
+    } catch (error) {
+      Alert.alert("Could not begin sandbox payment", error instanceof Error ? error.message : "Please try again.");
+    }
+  }
   async function logout() {
     if (!LOCAL_DEMO) await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     await Promise.all([
@@ -809,6 +847,7 @@ function CustomerApp({
         modeLabel="CUSTOMER"
         onLogout={logout}
       />
+      <PrototypeNotice />
       {activeOrder && <CustomerOrderBar order={activeOrder} />}
       <ScrollView
         style={styles.flex}
@@ -893,7 +932,7 @@ function CustomerApp({
                   )}
                 </View>
                 <View style={styles.flex}>
-                  <Text style={styles.kicker}>{index === 0 ? "CHEAP RUN" : "QUICK RUN"}</Text>
+                  <Text style={styles.kicker}>{index === 0 ? "DEMO BASKET RUN" : "DEMO QUICK RUN"}</Text>
                   <Text style={styles.cardTitle}>{result.shop.name}</Text>
                   <Text style={styles.meta}>
                     {result.items.length} items found · {result.shop.pickupMinutes} min
@@ -908,18 +947,18 @@ function CustomerApp({
         )}
         {tab === "drops" && (
           <>
-            <ScreenHead kicker="DROPS" title="Fresh deals. Right now." />
+            <ScreenHead kicker="DROPS · DEMO DATA" title="Fresh demo deals." />
             {drops.map((drop) => (
               <View style={styles.dropCard} key={drop.id}>
                 <View style={styles.dropVisual}>
                   <Flame size={32} color="#fff" />
-                  <Text>{drop.shop.name.toUpperCase()} JUST DROPPED</Text>
+                  <Text>{drop.shop.name.toUpperCase()} · DEMO DROP</Text>
                 </View>
                 <View style={styles.dropBody}>
                   <Text style={styles.cardTitle}>{drop.productName}</Text>
                   <Text style={styles.oldPrice}>R{(drop.originalPriceCents / 100).toFixed(2)}</Text>
                   <Text style={styles.dropPrice}>R{(drop.priceCents / 100).toFixed(2)}</Text>
-                  <Text style={styles.meta}>{drop.quantity} remaining</Text>
+                  <Text style={styles.meta}>{drop.quantity} demo units</Text>
                   <Pressable style={styles.primary} onPress={() => void reserve(drop.id)}>
                     <Text style={styles.primaryText}>RESERVE</Text>
                   </Pressable>
@@ -970,6 +1009,8 @@ function CustomerApp({
         <MobileCheckout
           checkout={checkout}
           customerName={user.displayName}
+          easy={easy}
+          onSecureTestPayment={startSecureTestPayment}
           onClose={() => setCheckout(null)}
           onOrder={(order) => void completeOrder(order, checkout.drop.id)}
         />
@@ -996,7 +1037,7 @@ function CustomerOrderBar({ order }: { order: MobileOrder }) {
         </View>
         <View style={styles.flex}>
           <Text style={styles.orderTrackerLabel}>
-            {order.status === "sold_out" ? "ACTION NEEDED" : "LIVE PACKING"}
+            {order.status === "sold_out" ? "ACTION NEEDED · DEMO" : "DEMO PACKING STATUS"}
           </Text>
           <Text style={styles.orderTrackerTitle}>{STATUS_LABELS[order.status]}</Text>
           <Text style={styles.orderTrackerMeta} numberOfLines={1}>
@@ -1008,11 +1049,11 @@ function CustomerOrderBar({ order }: { order: MobileOrder }) {
           <Text style={styles.pickupCodeValue}>#{order.pickupCode}</Text>
         </View>
       </View>
-      {order.payment === "interledger_test" && order.receipt ? (
+      {order.payment !== "pickup" ? (
         <View style={styles.mobileReceiptRow}>
-          <View><Text style={styles.mobileReceiptLabel}>PAYMENT SETTLED</Text><Text style={styles.mobileReceiptValue}>Open Payments test transaction</Text></View>
-          <View><Text style={styles.mobileReceiptLabel}>ORDER</Text><Text style={styles.mobileReceiptValue}>{order.id}</Text></View>
-          <View><Text style={styles.mobileReceiptLabel}>AMOUNT PAID</Text><Text style={styles.mobileReceiptValue}>R{(order.amountCents / 100).toFixed(2)}</Text></View>
+          <View><Text style={styles.mobileReceiptLabel}>{order.payment === "open_payments_test" ? "OPEN PAYMENTS · TEST" : "SIMULATED TEST PAYMENT"}</Text><Text style={styles.mobileReceiptValue}>{order.payment === "open_payments_test" ? "Sandbox transaction—no real funds transferred." : "Demo payment completed—no real funds were transferred."}</Text></View>
+          <View><Text style={styles.mobileReceiptLabel}>{order.payment === "open_payments_test" ? "PAYMENT SETTLED" : "DEMO ORDER"}</Text><Text style={styles.mobileReceiptValue}>{order.id}</Text></View>
+          <View><Text style={styles.mobileReceiptLabel}>{order.payment === "open_payments_test" ? "AMOUNT PAID" : "DEMO AMOUNT"}</Text><Text style={styles.mobileReceiptValue}>R{(order.amountCents / 100).toFixed(2)}</Text></View>
         </View>
       ) : null}
       {order.status === "sold_out" ? (
@@ -1055,7 +1096,7 @@ function CustomerOrderBar({ order }: { order: MobileOrder }) {
         <View style={styles.liveBadge}>
           <Radio size={10} color={palette.teal} />
           <Text style={styles.liveBadgeText}>
-            {order.payment === "interledger_test" ? "PAID · OPEN PAYMENTS" : "PAY AT COLLECTION"}
+            {order.payment === "open_payments_test" ? "OPEN PAYMENTS · TEST" : order.payment === "interledger_test" ? "SIMULATED TEST PAYMENT" : "PAY AT COLLECTION · DEMO ORDER"}
           </Text>
         </View>
       </View>
@@ -1066,11 +1107,15 @@ function CustomerOrderBar({ order }: { order: MobileOrder }) {
 function MobileCheckout({
   checkout,
   customerName,
+  easy,
+  onSecureTestPayment,
   onClose,
   onOrder,
 }: {
   checkout: CheckoutDrop;
   customerName: string;
+  easy: boolean;
+  onSecureTestPayment: (wallet: string) => Promise<void>;
   onClose: () => void;
   onOrder: (order: MobileOrder) => void;
 }) {
@@ -1078,6 +1123,7 @@ function MobileCheckout({
   const [wallet, setWallet] = useState("https://wallet.interledger-test.dev/customer-demo");
   const [stage, setStage] = useState<InterledgerStage | null>(null);
   const [busy, setBusy] = useState(false);
+  const [easyConfirmed, setEasyConfirmed] = useState(false);
   const [error, setError] = useState("");
   const stages: Array<{ id: InterledgerStage; label: string }> = [
     { id: "wallet", label: "Wallet" },
@@ -1104,6 +1150,11 @@ function MobileCheckout({
   });
 
   const payWithInterledger = async () => {
+    if (easy && !easyConfirmed) { setEasyConfirmed(true); return; }
+    if (!LOCAL_DEMO && !checkout.drop.id.startsWith("demo-drop-")) {
+      await onSecureTestPayment(wallet);
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -1144,7 +1195,7 @@ function MobileCheckout({
           <View style={styles.demoNotice}>
             <ShieldCheck size={17} color={palette.teal} />
             <Text style={styles.demoNoticeText}>
-              Sandbox only—no real money. No private wallet key enters the app.
+              Test payment only · Sandbox funds · No real money will be charged.
             </Text>
           </View>
           <View style={styles.checkoutItem}>
@@ -1181,8 +1232,7 @@ function MobileCheckout({
           {method === "interledger" ? (
             <>
               <Text style={styles.checkoutHelp}>
-                Simulates wallet lookup, incoming payment, an exact ILP quote, wallet approval and
-                outgoing payment using play money.
+                SIMULATED TEST PAYMENT. This local demo shows the payment journey using sandbox-style data. No real funds can move from this app.
               </Text>
               <Field
                 label="Test wallet address"
@@ -1204,6 +1254,7 @@ function MobileCheckout({
                   </View>
                 ))}
               </View>
+              {easy && !easyConfirmed ? <View style={styles.easyPaymentConfirm}><Text style={styles.easyPaymentConfirmText}>You are about to test the payment journey using sandbox funds. No real money will leave your account.</Text></View> : null}
               {error ? <Text style={styles.checkoutError}>{error}</Text> : null}
               <Pressable
                 style={styles.primary}
@@ -1213,7 +1264,7 @@ function MobileCheckout({
                 <Text style={styles.primaryText}>
                   {busy
                     ? "PROCESSING ILP TEST..."
-                    : `PAY R${(checkout.drop.priceCents / 100).toFixed(2)} WITH TEST WALLET`}
+                    : easy && !easyConfirmed ? "CONFIRM SANDBOX TEST" : `COMPLETE DEMO PAYMENT · R${(checkout.drop.priceCents / 100).toFixed(2)}`}
                 </Text>
                 <ArrowRight size={17} color="#fff" />
               </Pressable>
@@ -1221,7 +1272,7 @@ function MobileCheckout({
           ) : (
             <>
               <Text style={styles.checkoutHelp}>
-                The pickup code is stored on this device. Pay the shop when you collect.
+                PAY AT COLLECTION · DEMO ORDER. The pickup code is stored on this device; no payment is taken here.
               </Text>
               <Pressable style={styles.primary} onPress={() => onOrder(createOrder("pickup"))}>
                 <Text style={styles.primaryText}>RESERVE FOR PICKUP</Text>
@@ -1241,7 +1292,7 @@ function ShopCard({ shop, onReserve }: { shop: Shop; onReserve: (id: string) => 
       <View style={styles.signalTop}>
         <View style={styles.signalLabel}>
           <View style={styles.liveDot} />
-          <Text style={styles.signalLabelText}>SHOP SIGNAL</Text>
+          <Text style={styles.signalLabelText}>SHOP SIGNAL · DEMO DATA</Text>
         </View>
         <Text style={styles.strong}>STRONG</Text>
       </View>
@@ -1262,7 +1313,7 @@ function ShopCard({ shop, onReserve }: { shop: Shop; onReserve: (id: string) => 
       </View>
       <View style={styles.crates}>
         <Text style={styles.cratesText}>★★★★★</Text>
-        <Text style={styles.cratesScore}>{shop.rating.toFixed(1)} CRATES</Text>
+        <Text style={styles.cratesScore}>{shop.rating.toFixed(1)} CRATES · DEMO DATA</Text>
         <View style={styles.pickupChip}>
           <Clock3 size={11} color={palette.ink} />
           <Text style={styles.pickupChipText}>{shop.pickupMinutes} MIN PICKUP</Text>
@@ -1283,7 +1334,7 @@ function ShopCard({ shop, onReserve }: { shop: Shop; onReserve: (id: string) => 
       </View>
       {shop.drops[0] && (
         <View style={styles.inlineDrop}>
-          <Text style={styles.kicker}>LIVE DROP · {shop.drops[0].quantity} LEFT</Text>
+          <Text style={styles.kicker}>DEMO DROP · {shop.drops[0].quantity} DEMO UNITS</Text>
           <Text style={styles.cardTitle}>{shop.drops[0].productName}</Text>
           <View style={styles.inlineDropBottom}>
             <View>
@@ -1425,6 +1476,7 @@ function MerchantApp({ user, onSignOut }: { user: User; onSignOut: () => void })
         modeLabel="SHOP OWNER"
         onLogout={logout}
       />
+      <PrototypeNotice />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -1517,9 +1569,9 @@ function MerchantApp({ user, onSignOut }: { user: User; onSignOut: () => void })
         )}
         {tab === "orders" && (
           <>
-            <ScreenHead kicker="PACKING DESK" title="Live orders" />
+            <ScreenHead kicker="PACKING DESK · DEMO DATA" title="Demo orders" />
             <Text style={styles.screenIntro}>
-              Update each order as it moves from the counter to customer pickup.
+              Demo order statuses can be updated here; no real fulfilment is taking place.
             </Text>
             {data.orders.map((order) => (
               <OrderPackingCard
@@ -1533,10 +1585,10 @@ function MerchantApp({ user, onSignOut }: { user: User; onSignOut: () => void })
         )}
         {tab === "stock" && (
           <>
-            <ScreenHead kicker="LIVE STOCK" title="Inventory control" />
+            <ScreenHead kicker="STOCK · DEMO DATA" title="Inventory control" />
             <View style={styles.stockSummary}>
               <Text style={styles.stockSummaryValue}>{data.inventory.length}</Text>
-              <Text style={styles.stockSummaryLabel}>PRODUCTS LIVE</Text>
+              <Text style={styles.stockSummaryLabel}>DEMO PRODUCTS</Text>
               <View style={styles.stockSummaryDivider} />
               <Text style={[styles.stockSummaryValue, low > 0 && { color: palette.orange }]}>{low}</Text>
               <Text style={styles.stockSummaryLabel}>LOW STOCK</Text>
@@ -1607,7 +1659,7 @@ function OrderPackingCard({
           <View style={styles.packingStatusDot} />
           <Text style={styles.packingStatusText}>{STATUS_LABELS[order.status].toUpperCase()}</Text>
         </View>
-        {order.payment ? <Text style={styles.paymentTag}>{order.payment}{order.priceCents ? ` · R${(order.priceCents / 100).toFixed(2)} RECEIVED` : ""}</Text> : null}
+        {order.payment ? <Text style={styles.paymentTag}>{order.payment === "PAID · OPEN PAYMENTS" ? "SIMULATED TEST PAYMENT · Demo payment completed—no real funds were transferred." : order.payment}{order.priceCents ? ` · R${(order.priceCents / 100).toFixed(2)} DEMO AMOUNT` : ""}</Text> : null}
         {saving ? <ActivityIndicator size="small" color={palette.teal} /> : null}
       </View>
       <Text style={styles.controlLabel}>MOVE ORDER TO</Text>
@@ -2769,6 +2821,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#e4f4f0",
   },
   demoNoticeText: { flex: 1, color: palette.grey, fontSize: 9, lineHeight: 14 },
+  prototypeNotice: { flexDirection: "row", alignItems: "flex-start", gap: 7, marginHorizontal: 15, marginTop: 7, padding: 8, borderRadius: 10, backgroundColor: "#fff3cd", borderWidth: 1, borderColor: "#f0d98b" },
+  prototypeNoticeTag: { color: "#705400", fontSize: 7, fontWeight: "900", letterSpacing: 0.6 },
+  prototypeNoticeText: { flex: 1, color: "#675523", fontSize: 8, lineHeight: 11 },
+  easyPaymentConfirm: { marginTop: 10, padding: 10, borderRadius: 10, backgroundColor: "#fff3cd", borderWidth: 1, borderColor: "#f0d98b" },
+  easyPaymentConfirmText: { color: "#675523", fontSize: 9, lineHeight: 14, fontWeight: "700" },
   checkoutItem: {
     marginTop: 12,
     padding: 13,
