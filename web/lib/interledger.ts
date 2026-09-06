@@ -2,6 +2,7 @@ import {
   createAuthenticatedClient,
   isFinalizedGrantWithAccessToken,
 } from '@interledger/open-payments';
+import type { Grant, GrantContinuation } from '@interledger/open-payments';
 import { env } from 'cloudflare:workers';
 
 type PaymentEnvironment = {
@@ -39,7 +40,7 @@ export async function createInterledgerClient(config = getInterledgerConfig()) {
   });
 }
 
-export function finalizedAccessToken(grant: unknown) {
+export function finalizedAccessToken(grant: GrantContinuation | Grant) {
   if (!isFinalizedGrantWithAccessToken(grant)) throw new Error('The wallet did not issue an access token.');
   return grant.access_token.value;
 }

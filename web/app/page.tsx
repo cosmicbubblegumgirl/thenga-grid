@@ -13,27 +13,16 @@ import { OwnerDashboard } from '@/components/owner-dashboard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { apiFetch } from '@/lib/api';
-import type { Drop, Position, Shop, User } from '@/lib/types';
-
-declare global {
-  interface Document {
-    readonly modelContext?: {
-      registerTool(tool: {
-        name: string;
-        title: string;
-        description: string;
-        inputSchema: object;
-        annotations: { readOnlyHint: boolean; untrustedContentHint: boolean };
-        execute(input: unknown): unknown | Promise<unknown>;
-      }, options?: { signal?: AbortSignal }): void | Promise<void>;
-    };
-  }
-}
+import { apiFetch, isStaticDemo } from '@/lib/api';
+import type { AccountRole, Drop, Position, Shop, User } from '@/lib/types';
 
 type View = 'grid' | 'basket' | 'drops' | 'community' | 'quests';
 type CommunityPost = { id: string; authorName: string; body: string; createdAt: number; shopName?: string };
 const DEFAULT_LOCATION: Position = { latitude: -26.2383, longitude: 27.9077 };
+const DEMO_AREAS = [
+  { id: 'soweto', label: 'Soweto', detail: 'Orlando West', position: DEFAULT_LOCATION },
+  { id: 'ramsgate', label: 'Ramsgate Beach', detail: 'South Coast', position: { latitude: -30.8874, longitude: 30.35 } },
+] as const;
 
 const navItems: { id: View; label: string; icon: typeof Grid3X3 }[] = [
   { id: 'grid', label: 'Grid', icon: Grid3X3 },
@@ -132,32 +121,6 @@ export default function Home() {
     locate(false);
   }, [locate]);
 
-  useEffect(() => {
-    const context = document.modelContext;
-    if (!context?.registerTool) return;
-    const lifecycle = new AbortController();
-    void Promise.resolve(context.registerTool({
-      name: 'search_nearby_basket',
-      title: 'Search a nearby shopping basket',
-      description: 'Compare connected neighbourhood shops for a list of products and show Basket Battle results in the app.',
-      inputSchema: {
-        type: 'object',
-        properties: { query: { type: 'string', minLength: 2, maxLength: 180 } },
-        required: ['query'],
-        additionalProperties: false,
-      },
-      annotations: { readOnlyHint: true, untrustedContentHint: false },
-      execute(input) {
-        const next = typeof input === 'object' && input !== null && 'query' in input ? String(input.query).trim().slice(0, 180) : '';
-        if (next.length < 2) throw new Error('A basket query of at least two characters is required.');
-        setQuery(next);
-        setView('basket');
-        return { query: next, status: 'results_visible' };
-      },
-    }, { signal: lifecycle.signal })).catch(() => undefined);
-    return () => lifecycle.abort();
-  }, []);
-
   const selectedShop = useMemo(() => shops.find((shop) => shop.id === selectedId) ?? shops[0] ?? null, [shops, selectedId]);
   const participating = shops.filter((shop) => !shop.source);
   const allDrops = participating.flatMap((shop) => shop.drops.map((drop) => ({ ...drop, shop }))).sort((a, b) => a.priceCents - b.priceCents);
@@ -203,7 +166,35 @@ export default function Home() {
     notify(value ? 'Easy Mode is on.' : 'Grid Mode is on.');
   }
 
-  if (authOpen) return <AuthScreen location={location} locationName={locationName} onClose={() => setAuthOpen(false)} onAuthenticated={(account) => { setUser(account); setAuthOpen(false); notify(`Welcome to the Grid, ${account.displayName}.`); }} />;
+  async function enterDemo(role: AccountRole, position = location, areaLabel = locationName) {
+    const response = await apiFetch('/api/auth/demo', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ role, latitude: position.latitude, longitude: position.longitude }),
+    });
+    const data = await response.json() as { user?: User; error?: string };
+    if (!response.ok || !data.user) throw new Error(data.error || 'Could not open this demo.');
+    setUser(data.user);
+    setAuthOpen(false);
+    if (role === 'customer') setView('grid');
+    notify(`${role === 'owner' ? 'Shop owner' : 'Customer'} demo opened in ${areaLabel}.`);
+  }
+
+  async function selectDemoArea(area: typeof DEMO_AREAS[number]) {
+    setLocation(area.position);
+    setLocationName(area.id === 'ramsgate' ? 'Ramsgate Beach, KwaZulu-Natal' : 'Orlando West, Soweto');
+    setLocationStatus('idle');
+    setSelectedId(null);
+    setView('grid');
+    await loadArea(area.position);
+    if (user) await enterDemo(user.role, area.position, area.label);
+    else notify(`${area.label} demo Grid loaded.`);
+  }
+
+  const activeDemoArea = DEMO_AREAS.find((area) => Math.abs(location.latitude - area.position.latitude) < 0.25 && Math.abs(location.longitude - area.position.longitude) < 0.25)?.id;
+  const activeDemoRole: AccountRole = user?.role ?? 'customer';
+
+  if (authOpen) return <AuthScreen location={location} locationName={locationName} onClose={() => setAuthOpen(false)} onAuthenticated={(account) => { setUser(account); setAuthOpen(false); notify(`Welcome to the Grid, ${account.displayName}.`); }} onDemo={(role) => enterDemo(role)} />;
 
   return (
     <main className={easyMode ? 'site-shell easy-mode' : 'site-shell'}>
@@ -216,7 +207,16 @@ export default function Home() {
         {user ? <div className="account-menu"><button><span>{user.displayName.split(/\s+/).map((word) => word[0]).slice(0, 2).join('')}</span><i /><b>{user.displayName}</b></button><button onClick={() => void signOut()} aria-label="Sign out"><LogOut /></button></div> : <Button className="signin-button" onClick={() => setAuthOpen(true)}><UserRound /> Sign in</Button>}
       </header>
 
-      {user?.role === 'owner' ? <OwnerDashboard notify={notify} /> : <div className="customer-layout">
+      {isStaticDemo && <section className="demo-toolbar" aria-label="Demo controls">
+        <div className="demo-toolbar-copy"><span><Radio /></span><div><small>EXPLORE THE LIVE DEMO</small><strong>Choose a neighbourhood and view</strong></div></div>
+        <div className="demo-switch-group"><small>AREA</small><div>{DEMO_AREAS.map((area) => <button key={area.id} className={activeDemoArea === area.id ? 'active' : ''} onClick={() => void selectDemoArea(area)}><MapPin /><span><strong>{area.label}</strong><small>{area.detail}</small></span></button>)}</div></div>
+        <div className="demo-switch-group role"><small>VIEW AS</small><div>
+          <button className={activeDemoRole === 'customer' ? 'active' : ''} onClick={() => void enterDemo('customer')}><UserRound /><span><strong>Customer</strong><small>Shop nearby</small></span></button>
+          <button className={activeDemoRole === 'owner' ? 'active' : ''} onClick={() => void enterDemo('owner')}><Store /><span><strong>Shop owner</strong><small>Run the shop</small></span></button>
+        </div></div>
+      </section>}
+
+      {user?.role === 'owner' ? <OwnerDashboard key={user.id} notify={notify} /> : <div className="customer-layout">
         <aside className={menuOpen ? 'main-nav open' : 'main-nav'}>
           <div className="nav-title"><span>GRID MODE</span><button onClick={() => setMenuOpen(false)}><X /></button></div>
           <nav>{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => { setView(item.id); setMenuOpen(false); }}><Icon /><span>{item.label}</span>{item.id === 'drops' && allDrops.length > 0 && <b>{allDrops.length}</b>}</button>; })}</nav>
@@ -242,9 +242,10 @@ function GridView({ location, locationName, locationStatus, shops, selectedShop,
   location: Position; locationName: string; locationStatus: string; shops: Shop[]; selectedShop: Shop | null; selectedId: string | null; loading: boolean; favourites: string[];
   onLocate: () => void; onSelect: (id: string) => void; onDirections: (shop: Shop) => void; onFavourite: (id: string) => void; onReserve: (drop: Drop) => void; notify: (message: string) => void;
 }) {
+  const demoArea = locationName.toLowerCase().includes('ramsgate') ? 'Ramsgate Beach' : 'Soweto';
   return <div className="grid-view">
     <section className="map-panel">
-      <div className="map-toolbar"><div><span className="live-dot" /><strong>{locationStatus === 'live' ? 'Grid live around you' : 'Soweto demo Grid'}</strong><small>{shops.length} shops found near {locationName}</small></div><Button variant="outline" onClick={onLocate}><LocateFixed /> Use my location</Button></div>
+      <div className="map-toolbar"><div><span className="live-dot" /><strong>{locationStatus === 'live' ? 'Grid live around you' : `${demoArea} demo Grid`}</strong><small>{shops.length} shops found near {locationName}</small></div><Button variant="outline" onClick={onLocate}><LocateFixed /> Use my location</Button></div>
       <div className="map-frame">{loading ? <div className="map-loading"><Radio /><strong>Reading the neighbourhood signal…</strong></div> : <LiveMap shops={shops} selectedId={selectedId} location={location} onSelect={onSelect} />}</div>
       <div className="map-legend"><span><i className="connected" />Connected shop</span><span><i />Nearby OpenStreetMap listing</span><small>Map and local listings © OpenStreetMap contributors</small></div>
     </section>

@@ -17,13 +17,16 @@ type DemoState = {
   users: DemoUser[];
   currentUserId: string | null;
   shops: DemoShop[];
-  community: Array<{ id: string; authorName: string; body: string; createdAt: number; shopName?: string }>;
+  community: Array<{ id: string; authorName: string; body: string; createdAt: number; shopName?: string; area: 'soweto' | 'ramsgate' }>;
   orders: DemoOrder[];
   demand: Record<string, number>;
 };
 
-const STORAGE_KEY = 'thenga-grid-pages-demo-v1';
+const STORAGE_KEY = 'thenga-grid-pages-demo-v2';
 export const isStaticDemo = typeof __THENGA_STATIC_DEMO__ !== 'undefined' && __THENGA_STATIC_DEMO__;
+
+const SOWETO_LOCATION: Position = { latitude: -26.2383, longitude: 27.9077 };
+const RAMSGATE_LOCATION: Position = { latitude: -30.8874, longitude: 30.35 };
 
 const PRODUCTS = [
   ['prd_bread', 'Fresh white bread', 'Bakery'],
@@ -43,6 +46,15 @@ const SHOP_ROWS = [
   ['shop_khaya', 'Khaya Fresh Store', 'Maponya Street, Pimville, Soweto', -26.2661, 27.8965, 4.8, 112, 8, true, true],
   ['shop_naledi', 'Naledi Superette', 'Koma Road, Jabulani, Soweto', -26.2518, 27.8584, 4.5, 48, 9, false, false],
   ['shop_mzansi', 'Mzansi Mini Market', 'Mahalefele Road, Dube, Soweto', -26.2289, 27.8912, 4.7, 64, 5, true, true],
+  ['shop_harbour', 'Harbour Basket', 'Marine Drive, Ramsgate Beach', -30.8857, 30.3514, 4.9, 143, 6, true, true],
+  ['shop_bidstone', 'Bidstone Pantry', '88 Bidstone Road, Ramsgate Beach', -30.8885, 30.3485, 4.8, 97, 5, true, true],
+  ['shop_lagoon', 'Lagoon Fresh Stop', 'Ramsgate South, KwaZulu-Natal', -30.8911, 30.3523, 4.7, 81, 7, false, true],
+  ['shop_marine', 'Marine Tuck Shop', 'Marine Drive, Ramsgate Beach', -30.8838, 30.3551, 4.6, 62, 4, true, true],
+  ['shop_south_coast', 'South Coast Save', 'Ramsgate, KwaZulu-Natal', -30.8843, 30.3459, 4.5, 55, 8, false, false],
+  ['shop_coastal', 'Coastal Corner Store', 'Ramsgate North, KwaZulu-Natal', -30.8811, 30.3584, 4.8, 104, 6, true, true],
+  ['shop_ocean', 'Ocean View Grocer', 'Ramsgate Beach, KwaZulu-Natal', -30.8879, 30.3611, 4.7, 76, 9, true, true],
+  ['shop_family', 'Ramsgate Family Foods', 'Ramsgate West, KwaZulu-Natal', -30.8917, 30.3409, 4.6, 69, 7, false, true],
+  ['shop_green_valley', 'Green Valley Spaza', 'Ramsgate West, KwaZulu-Natal', -30.8863, 30.3379, 4.5, 44, 5, true, false],
 ] as const;
 
 const STOCK_ROWS = [
@@ -52,7 +64,20 @@ const STOCK_ROWS = [
   ['shop_khaya', 'prd_potatoes', 2400, 13], ['shop_khaya', 'prd_chicken', 5800, 8], ['shop_khaya', 'prd_rice', 2800, 16], ['shop_khaya', 'prd_bread', 1850, 9],
   ['shop_naledi', 'prd_maize', 3699, 11], ['shop_naledi', 'prd_milk', 2250, 7], ['shop_naledi', 'prd_bread', 1950, 12],
   ['shop_mzansi', 'prd_coke', 2600, 18], ['shop_mzansi', 'prd_eggs', 2350, 14], ['shop_mzansi', 'prd_bread', 1800, 10], ['shop_mzansi', 'prd_milk', 2150, 11],
+  ['shop_harbour', 'prd_bread', 1850, 14], ['shop_harbour', 'prd_milk', 2250, 9], ['shop_harbour', 'prd_eggs', 2450, 17], ['shop_harbour', 'prd_coke', 2899, 6], ['shop_harbour', 'prd_rice', 3199, 18],
+  ['shop_bidstone', 'prd_bread', 1799, 21], ['shop_bidstone', 'prd_milk', 2199, 11], ['shop_bidstone', 'prd_maize', 3799, 13], ['shop_bidstone', 'prd_potatoes', 2599, 8],
+  ['shop_lagoon', 'prd_chicken', 5799, 7], ['shop_lagoon', 'prd_eggs', 2399, 16], ['shop_lagoon', 'prd_rice', 2999, 12], ['shop_lagoon', 'prd_bread', 1899, 9],
+  ['shop_marine', 'prd_coke', 2699, 15], ['shop_marine', 'prd_bread', 1750, 12], ['shop_marine', 'prd_milk', 2299, 5],
+  ['shop_south_coast', 'prd_maize', 3650, 14], ['shop_south_coast', 'prd_rice', 2950, 19], ['shop_south_coast', 'prd_eggs', 2499, 10],
+  ['shop_coastal', 'prd_bread', 1825, 18], ['shop_coastal', 'prd_milk', 2175, 13], ['shop_coastal', 'prd_potatoes', 2499, 9], ['shop_coastal', 'prd_coke', 2799, 11],
+  ['shop_ocean', 'prd_chicken', 5899, 6], ['shop_ocean', 'prd_rice', 3050, 14], ['shop_ocean', 'prd_eggs', 2425, 12],
+  ['shop_family', 'prd_maize', 3599, 20], ['shop_family', 'prd_milk', 2249, 8], ['shop_family', 'prd_bread', 1849, 16],
+  ['shop_green_valley', 'prd_bread', 1700, 10], ['shop_green_valley', 'prd_coke', 2599, 12], ['shop_green_valley', 'prd_eggs', 2299, 9],
 ] as const;
+
+function isNear(position: Position, target: Position, tolerance = 0.25) {
+  return Math.abs(position.latitude - target.latitude) < tolerance && Math.abs(position.longitude - target.longitude) < tolerance;
+}
 
 function createDemoState(): DemoState {
   const now = Math.floor(Date.now() / 1000);
@@ -77,15 +102,30 @@ function createDemoState(): DemoState {
     id: 'drop_coke', productId: 'prd_coke', productName: 'Coke 2L', priceCents: 1800,
     originalPriceCents: 2999, quantity: 9, expiresAt: now + 43200, kind: 'drop',
   });
+  shops.find((shop) => shop.id === 'shop_harbour')!.drops.push({
+    id: 'drop_ramsgate_bread', productId: 'prd_bread', productName: 'Fresh white bread', priceCents: 1450,
+    originalPriceCents: 1850, quantity: 14, expiresAt: now + 86400, kind: 'drop',
+  });
+  shops.find((shop) => shop.id === 'shop_bidstone')!.drops.push({
+    id: 'drop_ramsgate_maize', productId: 'prd_maize', productName: 'Maize meal 2kg', priceCents: 3200,
+    originalPriceCents: 3799, quantity: 8, expiresAt: now + 64800, kind: 'last_crate',
+  });
   return {
     users: [],
     currentUserId: null,
     shops,
     community: [
-      { id: 'post_1', authorName: 'Nandi K.', body: 'Mama T finally has electricity vouchers again.', shopName: "Mama T's", createdAt: now - 480 },
-      { id: 'post_2', authorName: 'Lwazi Market', body: 'Fresh vetkoek available from 07:00 tomorrow morning.', shopName: 'Lwazi Market', createdAt: now - 1320 },
+      { id: 'post_1', authorName: 'Nandi K.', body: 'Mama T finally has electricity vouchers again.', shopName: "Mama T's", createdAt: now - 480, area: 'soweto' },
+      { id: 'post_2', authorName: 'Lwazi Market', body: 'Fresh vetkoek available from 07:00 tomorrow morning.', shopName: 'Lwazi Market', createdAt: now - 1320, area: 'soweto' },
+      { id: 'post_3', authorName: 'Ayanda M.', body: 'Harbour Basket has fresh bread and milk back in stock.', shopName: 'Harbour Basket', createdAt: now - 620, area: 'ramsgate' },
+      { id: 'post_4', authorName: 'Bidstone Pantry', body: 'New vegetable delivery has arrived near 88 Bidstone Road.', shopName: 'Bidstone Pantry', createdAt: now - 1740, area: 'ramsgate' },
     ],
-    orders: [],
+    orders: [
+      { id: 'order_soweto_new', shopId: 'shop_mamat', status: 'reserved', pickupCode: '4821', productName: 'Fresh white bread', customerName: 'Nandi Khumalo', priceCents: 1500 },
+      { id: 'order_soweto_packing', shopId: 'shop_mamat', status: 'packing', pickupCode: '1764', productName: 'Full cream milk 1L', customerName: 'Thabo Mokoena', priceCents: 2199 },
+      { id: 'order_ramsgate_new', shopId: 'shop_harbour', status: 'reserved', pickupCode: '5932', productName: 'Fresh white bread', customerName: 'Ayesha Naidoo', priceCents: 1450 },
+      { id: 'order_ramsgate_ready', shopId: 'shop_harbour', status: 'ready', pickupCode: '8046', productName: 'Large eggs 6-pack', customerName: 'Sipho Cele', priceCents: 2450 },
+    ],
     demand: { bread: 12, milk: 9, 'baby formula': 7, airtime: 5 },
   };
 }
@@ -147,26 +187,54 @@ async function demoFetch(rawUrl: string, init?: RequestInit): Promise<Response> 
   if (url.pathname.endsWith('/api/shops') && method === 'GET') {
     const origin = { latitude: Number(url.searchParams.get('lat')), longitude: Number(url.searchParams.get('lng')) };
     const located = Number.isFinite(origin.latitude) && Number.isFinite(origin.longitude);
+    const area = isNear(origin, RAMSGATE_LOCATION) ? 'ramsgate' : 'soweto';
     const shops = state.shops.map((shop) => ({
       ...shop,
       distanceKm: located ? Number(distanceKm(origin, shop).toFixed(2)) : null,
     })).sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
-    return json({ shops, community: state.community });
+    return json({ shops, community: state.community.filter((post) => post.area === area) });
   }
   if (url.pathname.endsWith('/api/osm-shops') && method === 'GET') return json({ shops: [] });
   if (url.pathname.endsWith('/api/location') && method === 'GET') {
     const latitude = Number(url.searchParams.get('lat'));
     const longitude = Number(url.searchParams.get('lng'));
-    const nearSoweto = Math.abs(latitude + 26.2383) < 0.2 && Math.abs(longitude - 27.9077) < 0.2;
-    return json(nearSoweto
-      ? { displayName: 'Orlando West, Soweto', address: { suburb: 'Orlando West', city: 'Soweto' } }
-      : { displayName: 'Your current area', address: {} });
+    const position = { latitude, longitude };
+    if (isNear(position, SOWETO_LOCATION)) return json({ displayName: 'Orlando West, Soweto', address: { suburb: 'Orlando West', city: 'Soweto' } });
+    if (isNear(position, RAMSGATE_LOCATION)) return json({ displayName: 'Ramsgate Beach, KwaZulu-Natal', address: { town: 'Ramsgate Beach', state: 'KwaZulu-Natal' } });
+    return json({ displayName: 'Your current area', address: {} });
   }
   if (url.pathname.endsWith('/api/auth/session') && method === 'GET') return json({ user: publicUser(current) });
   if (url.pathname.endsWith('/api/auth/logout') && method === 'POST') {
     state.currentUserId = null;
     saveState(state);
     return json({ ok: true });
+  }
+  if (url.pathname.endsWith('/api/auth/demo') && method === 'POST') {
+    const body = await bodyOf(init);
+    const role: AccountRole = body.role === 'owner' ? 'owner' : 'customer';
+    const position = { latitude: Number(body.latitude), longitude: Number(body.longitude) };
+    const region = isNear(position, RAMSGATE_LOCATION) ? 'ramsgate' : 'soweto';
+    const userId = `demo_${role}_${region}`;
+    const ownerShopId = region === 'ramsgate' ? 'shop_harbour' : 'shop_mamat';
+    let user = state.users.find((candidate) => candidate.id === userId);
+    if (!user) {
+      user = {
+        id: userId,
+        email: `${role}.${region}@thengagrid.demo`,
+        password: 'local-demo',
+        displayName: role === 'owner' ? (region === 'ramsgate' ? 'Zanele Dlamini' : 'Lindiwe Mokoena') : (region === 'ramsgate' ? 'Ayesha Naidoo' : 'Nandi Khumalo'),
+        role,
+        ...(role === 'owner' ? { shopId: ownerShopId } : {}),
+      };
+      state.users.push(user);
+    }
+    if (role === 'owner') {
+      const shop = state.shops.find((candidate) => candidate.id === ownerShopId);
+      if (shop) shop.ownerId = user.id;
+    }
+    state.currentUserId = user.id;
+    saveState(state);
+    return json({ user: publicUser(user) });
   }
   if (url.pathname.endsWith('/api/auth/signup') && method === 'POST') {
     const body = await bodyOf(init);

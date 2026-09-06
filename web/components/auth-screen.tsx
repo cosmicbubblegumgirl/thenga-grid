@@ -12,9 +12,10 @@ type Props = {
   locationName: string;
   onClose: () => void;
   onAuthenticated: (user: User) => void;
+  onDemo: (role: AccountRole) => Promise<void> | void;
 };
 
-export function AuthScreen({ location, locationName, onClose, onAuthenticated }: Props) {
+export function AuthScreen({ location, locationName, onClose, onAuthenticated, onDemo }: Props) {
   const [mode, setMode] = useState<'login' | 'signup'>('signup');
   const [role, setRole] = useState<AccountRole>('customer');
   const [busy, setBusy] = useState(false);
@@ -39,6 +40,17 @@ export function AuthScreen({ location, locationName, onClose, onAuthenticated }:
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not continue.');
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openDemo(nextRole: AccountRole) {
+    setBusy(true);
+    setError('');
+    try {
+      await onDemo(nextRole);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not open the demo.');
       setBusy(false);
     }
   }
@@ -98,6 +110,19 @@ export function AuthScreen({ location, locationName, onClose, onAuthenticated }:
               {busy ? 'Please wait…' : mode === 'signup' ? `Create ${role === 'owner' ? 'shop owner' : 'customer'} account` : 'Sign in'}
             </Button>
           </form>
+          {isStaticDemo && (
+            <section className="auth-demo">
+              <div className="auth-demo-title"><span>OR EXPLORE INSTANTLY</span><i /></div>
+              <div className="auth-demo-actions">
+                <button type="button" disabled={busy} onClick={() => void openDemo('customer')}>
+                  <UserRound /><span><strong>Open customer demo</strong><small>Browse, compare and reserve nearby</small></span>
+                </button>
+                <button type="button" disabled={busy} onClick={() => void openDemo('owner')}>
+                  <Store /><span><strong>Open shop owner demo</strong><small>Manage stock, orders and Drops</small></span>
+                </button>
+              </div>
+            </section>
+          )}
           <p className="auth-security"><ShieldCheck /> {isStaticDemo ? 'Demo accounts and changes stay only in this browser.' : 'Passwords are securely hashed and sessions stay private to this browser.'}</p>
         </div>
       </section>

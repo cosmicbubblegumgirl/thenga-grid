@@ -85,6 +85,28 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .account-menu svg { width: 15px; }
 .mobile-menu { display: none; }
 
+/* Demo controls */
+.demo-toolbar { min-height: 84px; display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; align-items: center; gap: 24px; padding: 12px 22px; border-bottom: 1px solid #d8d6ca; background: linear-gradient(100deg, #f4f3eb 0%, #fffef8 48%, #f3f6e8 100%); }
+.demo-toolbar-copy { display: flex; align-items: center; gap: 11px; }
+.demo-toolbar-copy > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px 12px 12px 4px; background: var(--ink); color: var(--lime); box-shadow: 0 8px 20px rgba(17,21,18,.13); }
+.demo-toolbar-copy svg { width: 18px; }
+.demo-toolbar-copy small, .demo-toolbar-copy strong { display: block; }
+.demo-toolbar-copy small { color: var(--teal); font-size: 7px; font-weight: 950; letter-spacing: 1.25px; }
+.demo-toolbar-copy strong { margin-top: 4px; font-size: 11px; }
+.demo-switch-group { display: flex; align-items: center; gap: 8px; }
+.demo-switch-group > small { color: var(--grey); font-size: 7px; font-weight: 950; letter-spacing: 1px; }
+.demo-switch-group > div { display: flex; gap: 4px; padding: 4px; border: 1px solid #d9d7cc; border-radius: 14px; background: rgba(255,255,255,.78); box-shadow: 0 5px 16px rgba(17,21,18,.04); }
+.demo-switch-group button { min-width: 128px; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--grey); text-align: left; transition: background .18s ease, color .18s ease, transform .18s ease; }
+.demo-switch-group button:hover { transform: translateY(-1px); color: var(--ink); }
+.demo-switch-group button > svg { width: 16px; flex: 0 0 16px; }
+.demo-switch-group button span, .demo-switch-group button strong, .demo-switch-group button small { display: block; }
+.demo-switch-group button strong { font-size: 9px; }
+.demo-switch-group button small { margin-top: 2px; color: #8b908b; font-size: 7px; }
+.demo-switch-group button.active { background: var(--lime); color: var(--ink); box-shadow: 0 5px 14px rgba(158,190,25,.2); }
+.demo-switch-group.role button.active { background: var(--ink); color: white; box-shadow: 0 7px 17px rgba(17,21,18,.18); }
+.demo-switch-group.role button.active > svg { color: var(--lime); }
+.demo-switch-group.role button.active small { color: #aeb5ae; }
+
 /* Customer layout and navigation */
 .customer-layout { min-height: calc(100vh - 82px); display: grid; grid-template-columns: 220px minmax(0, 1fr); }
 .main-nav { position: sticky; top: 82px; height: calc(100vh - 82px); display: flex; flex-direction: column; gap: 18px; padding: 24px 14px; border-right: 1px solid var(--line); background: #eae8df; }
@@ -334,6 +356,21 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .account-form input, .product-sheet input, .drop-builder input, .drop-builder select { height: 47px; border-color: #c9c7bd; background: white; font-size: 11px; }
 .auth-submit { height: 49px; margin-top: 5px; background: var(--ink); font-size: 10px; font-weight: 900; letter-spacing: .3px; }
 .form-error { margin: 0; padding: 10px 12px; border-radius: 10px; background: #ffe8e2; color: #ad3027; font-size: 9px; }
+.auth-demo { margin-top: 20px; }
+.auth-demo-title { display: flex; align-items: center; gap: 10px; color: var(--grey); }
+.auth-demo-title span { flex: 0 0 auto; font-size: 7px; font-weight: 950; letter-spacing: 1.1px; }
+.auth-demo-title i { height: 1px; flex: 1; background: var(--line); }
+.auth-demo-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 10px; }
+.auth-demo-actions button { min-height: 67px; display: flex; align-items: center; gap: 10px; padding: 10px 13px; border: 1px solid #d2d0c5; border-radius: 13px; background: white; color: var(--ink); text-align: left; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.auth-demo-actions button:hover { border-color: var(--teal); box-shadow: 0 8px 20px rgba(17,21,18,.08); transform: translateY(-1px); }
+.auth-demo-actions button:last-child { background: var(--ink); color: white; }
+.auth-demo-actions button:disabled { opacity: .55; pointer-events: none; }
+.auth-demo-actions svg { width: 20px; flex: 0 0 20px; color: var(--teal); }
+.auth-demo-actions button:last-child svg { color: var(--lime); }
+.auth-demo-actions span, .auth-demo-actions strong, .auth-demo-actions small { display: block; }
+.auth-demo-actions strong { font-size: 10px; }
+.auth-demo-actions small { margin-top: 3px; color: var(--grey); font-size: 7px; line-height: 1.3; }
+.auth-demo-actions button:last-child small { color: #9fa69f; }
 .auth-security { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 13px 0 0; color: var(--grey); font-size: 8px; }
 .auth-security svg { width: 13px; color: var(--teal); }
 
@@ -462,6 +499,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .route-results article { grid-template-columns: 48px 1fr 110px; }
   .route-results article > button { grid-column: 2 / -1; }
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .demo-toolbar { grid-template-columns: 1fr 1fr; gap: 12px; padding-inline: 14px; }
+  .demo-toolbar-copy { display: none; }
+  .demo-switch-group { justify-content: flex-end; }
 }
 
 @media (max-width: 900px) {
@@ -511,6 +551,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .signin-button { width: 40px; padding: 0; font-size: 0; }
   .signin-button svg { margin: 0; }
   .account-menu button:first-child b, .account-menu button:last-child { display: none; }
+  .demo-toolbar { grid-template-columns: 1fr; gap: 7px; padding: 9px 10px 10px; }
+  .demo-switch-group { display: grid; grid-template-columns: 38px minmax(0, 1fr); justify-content: stretch; gap: 5px; }
+  .demo-switch-group > div { min-width: 0; }
+  .demo-switch-group button { min-width: 0; flex: 1; height: 43px; padding: 0 8px; }
+  .demo-switch-group button strong { font-size: 8px; }
+  .demo-switch-group button small { display: none; }
   .map-panel { padding: 10px; }
   .map-toolbar { height: 54px; }
   .map-toolbar small { display: none; }
@@ -536,6 +582,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .auth-tabs button { flex: 1; }
   .auth-form-panel { padding: 20px; }
   .auth-form-wrap h2 { font-size: 25px; }
+  .auth-demo-actions { grid-template-columns: 1fr; }
   .owner-content { padding: 20px 14px 80px; }
   .owner-heading h1 { font-size: 25px; }
   .owner-heading > button { width: 41px; padding: 0; font-size: 0; }
