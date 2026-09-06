@@ -1,0 +1,36 @@
+{
+  "name": "thenga-grid-mobile",
+  "version": "2.1.0",
+  "main": "index.ts",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "build:customer:android": "eas build --platform android --profile customer-apk",
+    "build:merchant:android": "eas build --platform android --profile merchant-apk",
+    "build:customer:ios": "eas build --platform ios --profile customer-ios",
+    "build:merchant:ios": "eas build --platform ios --profile merchant-ios"
+  },
+  "dependencies": {
+    "expo": "~57.0.19",
+    "expo-location": "~57.0.15",
+    "expo-secure-store": "~57.0.3",
+    "expo-splash-screen": "~57.0.8",
+    "expo-status-bar": "~57.0.1",
+    "lucide-react-native": "^1.38.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-maps": "1.27.2",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "0.21.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "eas-cli": "23.2.0",
+    "typescript": "~6.0.3"
+  }
+}

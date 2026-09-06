@@ -1,0 +1,4 @@
+INTERLEDGER_CLIENT_WALLET_ADDRESS=https://wallet.interledger-test.dev/your-client-wallet
+INTERLEDGER_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nREPLACE_WITH_TEST_KEY\n-----END PRIVATE KEY-----"
+INTERLEDGER_KEY_ID=replace-with-test-key-id
+INTERLEDGER_RECEIVER_WALLET_ADDRESS=https://wallet.interledger-test.dev/your-merchant-wallet

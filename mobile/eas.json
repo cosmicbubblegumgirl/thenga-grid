@@ -1,0 +1,23 @@
+{
+  "cli": { "version": ">= 23.2.0" },
+  "build": {
+    "customer-apk": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "APP_VARIANT": "customer", "EXPO_PUBLIC_DEFAULT_ROLE": "customer" }
+    },
+    "merchant-apk": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "APP_VARIANT": "merchant", "EXPO_PUBLIC_DEFAULT_ROLE": "owner" }
+    },
+    "customer-ios": {
+      "distribution": "internal",
+      "env": { "APP_VARIANT": "customer", "EXPO_PUBLIC_DEFAULT_ROLE": "customer" }
+    },
+    "merchant-ios": {
+      "distribution": "internal",
+      "env": { "APP_VARIANT": "merchant", "EXPO_PUBLIC_DEFAULT_ROLE": "owner" }
+    }
+  }
+}

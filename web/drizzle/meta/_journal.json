@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1788299144514,
+      "tag": "0000_glorious_purple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788299221959,
+      "tag": "0001_careless_vin_gonzales",
+      "breakpoints": true
+    }
+  ]
+}

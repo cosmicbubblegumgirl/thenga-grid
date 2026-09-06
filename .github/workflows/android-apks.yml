@@ -1,0 +1,101 @@
+name: Android release packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android-apks.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }} APK
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: customer
+            role: customer
+            label: Customer
+            filename: THENGA-GRID-Customer-v2.0.0.apk
+          - variant: merchant
+            role: owner
+            label: Shop-Owner
+            filename: THENGA-GRID-Shop-Owner-v2.0.0.apk
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: mobile/pnpm-lock.yaml
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Android project
+        working-directory: mobile
+        env:
+          APP_VARIANT: ${{ matrix.variant }}
+          EXPO_PUBLIC_DEFAULT_ROLE: ${{ matrix.role }}
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+
+      - name: Compile signed installable package
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Name release package
+        run: cp mobile/android/app/build/outputs/apk/release/app-release.apk "${{ matrix.filename }}"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.filename }}
+          path: ${{ matrix.filename }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish Android downloads
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: downloads
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "android-${{ github.run_number }}"
+          downloads/*.apk
+          --repo "$GITHUB_REPOSITORY"
+          --title "THENGA GRID Android apps"
+          --notes "Installable Android packages for customers and shop owners. These demonstration builds use fictional neighbourhood data and can also connect to the production API when EXPO_PUBLIC_API_URL is supplied."
